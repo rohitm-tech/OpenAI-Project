@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IMessage {
   role: 'user' | 'assistant' | 'developer';
   content: string;
-  type: 'text' | 'image' | 'audio';
+  type: 'text' | 'image' | 'audio' | 'generated-image';
   metadata?: {
     imageUrl?: string;
     audioUrl?: string;
@@ -34,7 +34,7 @@ const MessageSchema = new Schema<IMessage>(
     },
     type: {
       type: String,
-      enum: ['text', 'image', 'audio'],
+      enum: ['text', 'image', 'audio', 'generated-image'],
       default: 'text',
     },
     metadata: {

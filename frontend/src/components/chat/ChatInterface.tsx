@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Send, Image, Mic, Loader2, Square, Sparkles, Wand2, Volume2, VolumeX, Phone, Copy, Check, User, Bot, Download } from 'lucide-react';
 import { aiService, TextRequest } from '@/services/ai';
+import { conversationService } from '@/services/conversations';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -13,16 +14,21 @@ interface Message {
   type: 'text' | 'image' | 'audio' | 'generated-image';
   isLoading?: boolean;
   imageUrl?: string;
+  metadata?: {
+    imageUrl?: string;
+  };
 }
 
 interface ChatInterfaceProps {
   conversationId?: string;
   onNewConversation?: () => void;
+  onConversationUpdated?: () => void;
 }
 
 export default function ChatInterface({
   conversationId,
   onNewConversation,
+  onConversationUpdated,
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -72,6 +78,43 @@ export default function ChatInterface({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Load conversation when conversationId changes
+  useEffect(() => {
+    if (conversationId) {
+      loadConversation(conversationId);
+    } else {
+      setMessages([]);
+    }
+  }, [conversationId]);
+
+  const loadConversation = async (id: string) => {
+    try {
+      const response = await conversationService.getById(id);
+      if (response.success && response.data.messages) {
+        const loadedMessages: Message[] = response.data.messages.map((msg) => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+          type: (msg.type as 'text' | 'image' | 'audio' | 'generated-image') || 'text',
+          imageUrl: msg.metadata?.imageUrl,
+        }));
+        setMessages(loadedMessages);
+      }
+    } catch (error) {
+      console.error('Error loading conversation:', error);
+    }
+  };
+
+  const saveMessages = useCallback(async (newMessages: { role: string; content: string; type: string; metadata?: any }[]) => {
+    if (!conversationId) return;
+    
+    try {
+      await conversationService.addMessages(conversationId, newMessages as any);
+      onConversationUpdated?.();
+    } catch (error) {
+      console.error('Error saving messages:', error);
+    }
+  }, [conversationId, onConversationUpdated]);
 
   const handleSend = async () => {
     if ((!input.trim() && !selectedImage) || isLoading) return;
@@ -131,6 +174,12 @@ export default function ChatInterface({
         async (fullText) => {
           setIsStreaming(false);
           setIsLoading(false);
+          
+          // Save messages to conversation
+          await saveMessages([
+            { role: 'user', content: prompt, type: 'text' },
+            { role: 'assistant', content: fullText, type: 'text' },
+          ]);
           
           // Automatically speak the response if audio is enabled
           if (audioEnabled && fullText && fullText.trim()) {
@@ -213,6 +262,12 @@ export default function ChatInterface({
         lastMessage.isLoading = false;
         return newMessages;
       });
+      
+      // Save messages to conversation
+      await saveMessages([
+        { role: 'user', content: `Generate an image: ${prompt}`, type: 'text' },
+        { role: 'assistant', content: revisedPrompt, type: 'generated-image', metadata: { imageUrl } },
+      ]);
     } catch (error: any) {
       console.error('Error generating image:', error);
       setMessages((prev) => {
@@ -303,6 +358,12 @@ export default function ChatInterface({
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+      
+      // Save messages to conversation
+      await saveMessages([
+        { role: 'user', content: prompt, type: 'image', metadata: { imageUrl: imageDataUrl } },
+        { role: 'assistant', content: analysisText, type: 'text' },
+      ]);
     } catch (error: any) {
       console.error('Error analyzing image:', error);
       const errorMessage: Message = {
@@ -811,8 +872,8 @@ export default function ChatInterface({
   }, [isRealtimeMode]);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
           <div className="text-center text-muted-foreground mt-12 md:mt-16">
             <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 mb-4">
@@ -975,7 +1036,7 @@ export default function ChatInterface({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="border-t bg-background">
+      <div className="border-t bg-background shrink-0">
         {/* Input Area */}
         <div className="p-4">
           {selectedImage && (

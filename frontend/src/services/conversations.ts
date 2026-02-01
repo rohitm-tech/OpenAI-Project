@@ -3,13 +3,13 @@ import api from './api';
 export interface Message {
   role: 'user' | 'assistant' | 'developer';
   content: string;
-  type: 'text' | 'image' | 'audio';
+  type: 'text' | 'image' | 'audio' | 'generated-image';
   metadata?: {
     imageUrl?: string;
     audioUrl?: string;
     fileId?: string;
   };
-  timestamp: Date;
+  timestamp?: Date;
 }
 
 export interface Conversation {
@@ -57,6 +57,22 @@ export const conversationService = {
   delete: async (id: string) => {
     const response = await api.delete<{ success: boolean; message: string }>(
       `/conversations/${id}`
+    );
+    return response.data;
+  },
+
+  addMessage: async (id: string, message: Omit<Message, 'timestamp'>) => {
+    const response = await api.post<{ success: boolean; data: Conversation }>(
+      `/conversations/${id}/messages`,
+      message
+    );
+    return response.data;
+  },
+
+  addMessages: async (id: string, messages: Omit<Message, 'timestamp'>[]) => {
+    const response = await api.post<{ success: boolean; data: Conversation }>(
+      `/conversations/${id}/messages/batch`,
+      { messages }
     );
     return response.data;
   },
