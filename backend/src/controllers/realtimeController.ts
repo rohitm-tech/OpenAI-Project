@@ -54,3 +54,54 @@ export const createRealtimeClientSecret = async (req: AuthRequest, res: Response
     });
   }
 };
+
+/**
+ * Handle WebRTC SDP exchange for Realtime API
+ * This proxies the SDP offer/answer exchange to avoid CORS issues
+ */
+export const handleRealtimeSDP = async (req: AuthRequest, res: Response) => {
+  try {
+    const { sdp, clientSecret } = req.body;
+
+    if (!sdp || !clientSecret) {
+      return res.status(400).json({
+        success: false,
+        error: 'SDP and clientSecret are required',
+      });
+    }
+
+    // Forward SDP offer to OpenAI Realtime API
+    const response = await fetch('https://api.openai.com/v1/realtime/calls', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${clientSecret}`,
+        'Content-Type': 'application/sdp',
+      },
+      body: sdp,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('SDP response error:', response.status, errorText);
+      return res.status(response.status).json({
+        success: false,
+        error: `Failed to establish RTC connection: ${response.status}`,
+      });
+    }
+
+    const answerSdp = await response.text();
+
+    res.json({
+      success: true,
+      data: {
+        sdp: answerSdp,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error handling SDP exchange:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to handle SDP exchange',
+    });
+  }
+};

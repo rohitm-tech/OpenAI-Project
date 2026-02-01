@@ -515,24 +515,8 @@ export default function ChatInterface({
         };
       });
 
-      // Configure session immediately after connection
-      try {
-        ws.send(
-          JSON.stringify({
-            type: 'session.update',
-            session: {
-              type: 'realtime',
-              instructions: 'You are a helpful assistant. Be conversational and natural.',
-              audio: {
-                output: { voice: 'alloy' },
-              },
-            },
-          })
-        );
-        console.log('Session update sent');
-      } catch (error) {
-        console.error('Error sending session update:', error);
-      }
+      // Session is already configured via client secret - no additional update needed
+      console.log('WebSocket ready, proceeding to WebRTC setup');
 
       // Get user media (microphone)
       const stream = await navigator.mediaDevices.getUserMedia({ 
