@@ -25,6 +25,14 @@ export interface TextToSpeechRequest {
   model?: string;
 }
 
+export interface VideoCreateRequest {
+  prompt: string;
+  model?: 'sora-2' | 'sora-2-pro';
+  size?: string;
+  seconds?: number;
+  inputReference?: File;
+}
+
 export const aiService = {
   generateText: async (data: TextRequest) => {
     const response = await api.post('/ai/text', data);
@@ -135,5 +143,110 @@ export const aiService = {
   createRealtimeClientSecret: async (data: { voice?: string; instructions?: string }) => {
     const response = await api.post('/ai/realtime/client-secret', data);
     return response.data;
+  },
+
+  createVideo: async (data: VideoCreateRequest) => {
+    const formData = new FormData();
+    formData.append('prompt', data.prompt);
+    if (data.model) formData.append('model', data.model);
+    if (data.size) formData.append('size', data.size);
+    if (data.seconds) formData.append('seconds', data.seconds.toString());
+    if (data.inputReference) formData.append('input_reference', data.inputReference);
+
+    const response = await api.post('/ai/video/create', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  getVideoStatus: async (videoId: string) => {
+    const response = await api.get(`/ai/video/${videoId}/status`);
+    return response.data;
+  },
+
+  downloadVideo: async (videoId: string, variant: 'video' | 'thumbnail' | 'spritesheet' = 'video') => {
+    const response = await api.get(`/ai/video/${videoId}/download?variant=${variant}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  createAndPollVideo: async (
+    data: VideoCreateRequest,
+    onProgress?: (progress: number, status: string) => void,
+    onComplete?: (video: any) => void,
+    onError?: (error: Error) => void
+  ) => {
+    try {
+      const formData = new FormData();
+      formData.append('prompt', data.prompt);
+      if (data.model) formData.append('model', data.model);
+      if (data.size) formData.append('size', data.size);
+      if (data.seconds) formData.append('seconds', data.seconds.toString());
+      if (data.inputReference) formData.append('input_reference', data.inputReference);
+
+      const baseURL = api.defaults.baseURL || `${config.apiUrl}/api/v1`;
+      const response = await fetch(`${baseURL}/ai/video/create-and-poll`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        credentials: 'include',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = 'Video creation failed';
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('No reader available');
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const eventData = JSON.parse(line.slice(6));
+              if (eventData.type === 'progress' && onProgress) {
+                onProgress(eventData.progress, eventData.status);
+              } else if (eventData.type === 'completed' && onComplete) {
+                onComplete(eventData.video);
+                return eventData.video;
+              } else if (eventData.type === 'error') {
+                throw new Error(eventData.error);
+              }
+            } catch (e) {
+              // Ignore JSON parse errors
+            }
+          }
+        }
+      }
+    } catch (error) {
+      if (onError) {
+        onError(error as Error);
+      } else {
+        throw error;
+      }
+    }
   },
 };

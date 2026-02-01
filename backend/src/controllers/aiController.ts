@@ -233,3 +233,147 @@ export const speechToText = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+const videoCreateSchema = z.object({
+  prompt: z.string().min(1),
+  model: z.enum(['sora-2', 'sora-2-pro']).optional().default('sora-2'),
+  size: z.string().optional().default('1280x720'),
+  seconds: z.number().min(1).max(60).optional().default(8),
+});
+
+export const createVideo = async (req: AuthRequest, res: Response) => {
+  try {
+    const { prompt, model, size, seconds } = videoCreateSchema.parse(req.body);
+
+    // Check if there's an input reference image
+    let inputReference: Buffer | undefined;
+    if (req.file) {
+      inputReference = req.file.buffer;
+    }
+
+    const video = await OpenAIService.createVideo(
+      prompt,
+      model,
+      size,
+      seconds,
+      inputReference
+    );
+
+    res.json({
+      success: true,
+      data: video,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
+
+export const getVideoStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const { videoId } = req.params;
+
+    if (!videoId) {
+      res.status(400).json({
+        success: false,
+        error: 'videoId is required',
+      });
+      return;
+    }
+
+    const video = await OpenAIService.getVideoStatus(videoId);
+
+    res.json({
+      success: true,
+      data: video,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
+
+export const downloadVideo = async (req: AuthRequest, res: Response) => {
+  try {
+    const { videoId } = req.params;
+    const variant = (req.query.variant as 'video' | 'thumbnail' | 'spritesheet') || 'video';
+
+    if (!videoId) {
+      res.status(400).json({
+        success: false,
+        error: 'videoId is required',
+      });
+      return;
+    }
+
+    const videoBuffer = await OpenAIService.downloadVideo(videoId, variant);
+
+    // Set appropriate content type
+    const contentType = variant === 'video' 
+      ? 'video/mp4' 
+      : variant === 'thumbnail'
+      ? 'image/webp'
+      : 'image/jpeg';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${videoId}.${variant === 'video' ? 'mp4' : variant === 'thumbnail' ? 'webp' : 'jpg'}"`);
+    res.send(videoBuffer);
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
+
+export const createAndPollVideo = async (req: AuthRequest, res: Response) => {
+  try {
+    const { prompt, model, size, seconds } = videoCreateSchema.parse(req.body);
+
+    // Check if there's an input reference image
+    let inputReference: Buffer | undefined;
+    if (req.file) {
+      inputReference = req.file.buffer;
+    }
+
+    // Set SSE headers for progress updates
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    try {
+      const video = await OpenAIService.createAndPollVideo(
+        prompt,
+        model,
+        size,
+        seconds,
+        inputReference,
+        (progress, status) => {
+          res.write(`data: ${JSON.stringify({ type: 'progress', progress, status })}\n\n`);
+        }
+      );
+
+      // Send completion
+      res.write(`data: ${JSON.stringify({ type: 'completed', video })}\n\n`);
+      res.end();
+    } catch (pollError: any) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: pollError.message })}\n\n`);
+      res.end();
+    }
+  } catch (error: any) {
+    if (!res.headersSent) {
+      res.status(400).json({
+        success: false,
+        error: error.message,
+      });
+    } else {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.end();
+    }
+  }
+};

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Send, Image, Mic, Loader2, Square, Sparkles, Wand2, Volume2, VolumeX, Phone, Copy, Check, User, Bot, Download } from 'lucide-react';
+import { Send, Image, Mic, Loader2, Square, Sparkles, Wand2, Volume2, VolumeX, Phone, Copy, Check, User, Bot, Download, Video } from 'lucide-react';
 import { aiService, TextRequest } from '@/services/ai';
 import { conversationService } from '@/services/conversations';
 import ReactMarkdown from 'react-markdown';
@@ -11,11 +11,17 @@ import remarkGfm from 'remark-gfm';
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  type: 'text' | 'image' | 'audio' | 'generated-image';
+  type: 'text' | 'image' | 'audio' | 'generated-image' | 'video';
   isLoading?: boolean;
   imageUrl?: string;
+  videoUrl?: string;
+  videoId?: string;
+  videoProgress?: number;
+  videoStatus?: string;
   metadata?: {
     imageUrl?: string;
+    videoUrl?: string;
+    videoId?: string;
   };
 }
 
@@ -42,6 +48,7 @@ export default function ChatInterface({
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [generateImageMode, setGenerateImageMode] = useState(false);
+  const [generateVideoMode, setGenerateVideoMode] = useState(false);
   const [isRealtimeMode, setIsRealtimeMode] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -99,8 +106,10 @@ export default function ChatInterface({
         const loadedMessages: Message[] = response.data.messages.map((msg) => ({
           role: msg.role as 'user' | 'assistant',
           content: msg.content,
-          type: (msg.type as 'text' | 'image' | 'audio' | 'generated-image') || 'text',
+          type: (msg.type as 'text' | 'image' | 'audio' | 'generated-image' | 'video') || 'text',
           imageUrl: msg.metadata?.imageUrl,
+          videoUrl: msg.metadata?.videoUrl,
+          videoId: msg.metadata?.videoId,
         }));
         setMessages(loadedMessages);
       }
@@ -133,6 +142,12 @@ export default function ChatInterface({
     // Check if we're in image generation mode
     if (generateImageMode) {
       await handleGenerateImage();
+      return;
+    }
+
+    // Check if we're in video generation mode
+    if (generateVideoMode) {
+      await handleGenerateVideo();
       return;
     }
 
@@ -358,7 +373,175 @@ export default function ChatInterface({
 
   const handleGenerateImageClick = () => {
     setGenerateImageMode(true);
+    setGenerateVideoMode(false);
     inputRef.current?.focus();
+  };
+
+  const handleGenerateVideoClick = () => {
+    setGenerateVideoMode(true);
+    setGenerateImageMode(false);
+    inputRef.current?.focus();
+  };
+
+  const handleGenerateVideo = async () => {
+    if (!input.trim() || isLoading || isCreatingConversation) return;
+
+    // Create a new conversation if one doesn't exist
+    let currentConversationId = conversationId;
+    if (!currentConversationId) {
+      try {
+        setIsCreatingConversation(true);
+        const response = await conversationService.create();
+        if (response.success) {
+          currentConversationId = response.data._id;
+          onConversationIdChange?.(currentConversationId);
+        }
+      } catch (error) {
+        console.error('Error creating conversation:', error);
+        setIsCreatingConversation(false);
+        return;
+      } finally {
+        setIsCreatingConversation(false);
+      }
+    }
+
+    const prompt = input.trim();
+    const userMessage: Message = {
+      role: 'user',
+      content: `Generate a video: ${prompt}`,
+      type: 'text',
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInput('');
+    setIsLoading(true);
+
+    const assistantMessage: Message = {
+      role: 'assistant',
+      content: '',
+      type: 'video',
+      isLoading: true,
+      videoProgress: 0,
+      videoStatus: 'queued',
+    };
+
+    setMessages((prev) => [...prev, assistantMessage]);
+
+    try {
+      await aiService.createAndPollVideo(
+        {
+          prompt,
+          model: 'sora-2',
+          size: '1280x720',
+          seconds: 8,
+        },
+        (progress, status) => {
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage && lastMessage.type === 'video') {
+              newMessages[newMessages.length - 1] = {
+                ...lastMessage,
+                videoProgress: progress,
+                videoStatus: status,
+                isLoading: status !== 'completed' && status !== 'failed',
+              };
+            }
+            return newMessages;
+          });
+        },
+        async (video) => {
+          try {
+            // Download the video
+            const videoBlob = await aiService.downloadVideo(video.id, 'video');
+            const videoUrl = URL.createObjectURL(videoBlob);
+
+            setMessages((prev) => {
+              const newMessages = [...prev];
+              const lastMessage = newMessages[newMessages.length - 1];
+              if (lastMessage && lastMessage.type === 'video') {
+                newMessages[newMessages.length - 1] = {
+                  ...lastMessage,
+                  content: prompt,
+                  videoUrl,
+                  videoId: video.id,
+                  videoProgress: 100,
+                  videoStatus: 'completed',
+                  isLoading: false,
+                };
+              }
+              return newMessages;
+            });
+
+            // Save messages to conversation
+            if (currentConversationId) {
+              await saveMessages([
+                { role: 'user', content: `Generate a video: ${prompt}`, type: 'text' },
+                { role: 'assistant', content: prompt, type: 'video', metadata: { videoUrl, videoId: video.id } },
+              ], currentConversationId);
+            }
+          } catch (downloadError: any) {
+            console.error('Error downloading video:', downloadError);
+            setMessages((prev) => {
+              const newMessages = [...prev];
+              const lastMessage = newMessages[newMessages.length - 1];
+              if (lastMessage) {
+                newMessages[newMessages.length - 1] = {
+                  ...lastMessage,
+                  content: `Error downloading video: ${downloadError.message}`,
+                  type: 'text',
+                  isLoading: false,
+                };
+              }
+              return newMessages;
+            });
+          }
+        },
+        (error) => {
+          console.error('Error generating video:', error);
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage) {
+              newMessages[newMessages.length - 1] = {
+                ...lastMessage,
+                content: `Error: ${error.message}`,
+                type: 'text',
+                isLoading: false,
+              };
+            }
+            return newMessages;
+          });
+        }
+      );
+    } catch (error: any) {
+      console.error('Error generating video:', error);
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        const lastMessage = newMessages[newMessages.length - 1];
+        if (lastMessage) {
+          newMessages[newMessages.length - 1] = {
+            ...lastMessage,
+            content: `Error: ${error.response?.data?.error || error.message || 'Failed to generate video'}`,
+            type: 'text',
+            isLoading: false,
+          };
+        }
+        return newMessages;
+      });
+    } finally {
+      setIsLoading(false);
+      setGenerateVideoMode(false);
+    }
+  };
+
+  const downloadVideo = (videoUrl: string, filename: string = 'generated-video.mp4') => {
+    const link = document.createElement('a');
+    link.href = videoUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleImageUpload = () => {
@@ -1094,6 +1277,7 @@ export default function ChatInterface({
               <span className="px-3 py-1 rounded-full bg-muted border">💬 Text Chat</span>
               <span className="px-3 py-1 rounded-full bg-muted border">🖼️ Image Analysis</span>
               <span className="px-3 py-1 rounded-full bg-muted border">✨ Generate Images</span>
+              <span className="px-3 py-1 rounded-full bg-muted border">🎬 Generate Videos</span>
               <span className="px-3 py-1 rounded-full bg-muted border">🎤 Voice Input</span>
             </div>
           </div>
@@ -1175,6 +1359,69 @@ export default function ChatInterface({
                     <p className="text-xs text-muted-foreground">
                       {message.content}
                     </p>
+                  )}
+                </div>
+              ) : message.type === 'video' ? (
+                <div className="space-y-2">
+                  {message.isLoading ? (
+                    <div className="space-y-2">
+                      <div className="relative rounded-lg overflow-hidden bg-muted/50 border border-border">
+                        <div className="aspect-video flex items-center justify-center">
+                          <div className="text-center space-y-2">
+                            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                            <p className="text-sm text-muted-foreground">
+                              {message.videoStatus === 'queued' ? 'Queued...' : 
+                               message.videoStatus === 'in_progress' ? 'Generating video...' : 
+                               'Processing...'}
+                            </p>
+                            {message.videoProgress !== undefined && (
+                              <div className="w-64 mx-auto">
+                                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-primary transition-all duration-300"
+                                    style={{ width: `${message.videoProgress}%` }}
+                                  />
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {message.videoProgress.toFixed(0)}%
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : message.videoUrl ? (
+                    <div className="space-y-2">
+                      <div className="relative rounded-lg overflow-hidden group/video">
+                        <video
+                          src={message.videoUrl}
+                          controls
+                          className="max-w-[600px] rounded-lg"
+                          preload="metadata"
+                        />
+                        <div className="absolute top-2 right-2 bg-black/50 rounded-lg opacity-0 group-hover/video:opacity-100 transition-opacity">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => downloadVideo(message.videoUrl!, `generated-video-${index}.mp4`)}
+                          >
+                            <Download className="h-4 w-4 mr-1" />
+                            Download
+                          </Button>
+                        </div>
+                      </div>
+                      {message.content && (
+                        <p className="text-xs text-muted-foreground">
+                          {message.content}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">
+                      {message.content || 'Video generation failed'}
+                    </div>
                   )}
                 </div>
               ) : (
@@ -1270,7 +1517,7 @@ export default function ChatInterface({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder={generateImageMode ? "Describe the image..." : "Type your message..."}
+                placeholder={generateImageMode ? "Describe the image..." : generateVideoMode ? "Describe the video..." : "Type your message..."}
                 className="w-full min-h-[52px] max-h-[200px] p-3 border rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-ring bg-background text-sm"
                 style={{ 
                   paddingBottom: isRecording ? '36px' : '28px',
@@ -1282,6 +1529,11 @@ export default function ChatInterface({
               {generateImageMode && (
                 <div className="absolute top-2 right-2 text-xs text-muted-foreground">
                   Image Mode
+                </div>
+              )}
+              {generateVideoMode && (
+                <div className="absolute top-2 right-2 text-xs text-muted-foreground">
+                  Video Mode
                 </div>
               )}
               {isRecording && (
@@ -1318,6 +1570,16 @@ export default function ChatInterface({
               disabled={isLoading || isRealtimeMode}
             >
               <Wand2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-7 w-7 ${generateVideoMode ? 'bg-primary/10 text-primary' : ''}`}
+              title="Generate Video"
+              onClick={handleGenerateVideoClick}
+              disabled={isLoading || isRealtimeMode}
+            >
+              <Video className="h-4 w-4" />
             </Button>
             <Button
               variant="ghost"

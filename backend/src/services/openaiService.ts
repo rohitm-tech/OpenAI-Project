@@ -397,4 +397,187 @@ export class OpenAIService {
       throw new Error(`OpenAI API error: ${error.message || error.error?.message || 'Unknown error'}`);
     }
   }
+
+  /**
+   * Create a video generation job using Sora API
+   */
+  static async createVideo(
+    prompt: string,
+    model: 'sora-2' | 'sora-2-pro' = 'sora-2',
+    size: string = '1280x720',
+    seconds: number = 8,
+    inputReference?: Buffer
+  ) {
+    try {
+      // Use FormData (available in Node.js 18+)
+      const formData = new FormData();
+      formData.append('prompt', prompt);
+      formData.append('model', model);
+      formData.append('size', size);
+      formData.append('seconds', seconds.toString());
+
+      // If input reference is provided, add it to the request
+      if (inputReference) {
+        // Create a File-like object for Node.js
+        const file = new File([inputReference], 'reference.jpg', { type: 'image/jpeg' });
+        formData.append('input_reference', file);
+      }
+
+      const response = await fetch('https://api.openai.com/v1/videos', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.openaiApiKey}`,
+          // Don't set Content-Type - fetch will set it with boundary for FormData
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json() as { error?: { message?: string } };
+        throw new Error(error.error?.message || 'Failed to create video');
+      }
+
+      const video = await response.json() as {
+        id: string;
+        status: string;
+        model: string;
+        progress?: number;
+        seconds: string;
+        size: string;
+        created_at: number;
+      };
+
+      return {
+        id: video.id,
+        status: video.status,
+        model: video.model,
+        progress: video.progress || 0,
+        seconds: video.seconds,
+        size: video.size,
+        createdAt: video.created_at,
+      };
+    } catch (error: any) {
+      console.error('OpenAI video creation error:', error);
+      throw new Error(`OpenAI API error: ${error.message || error.error?.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get video status by ID
+   */
+  static async getVideoStatus(videoId: string) {
+    try {
+      const response = await fetch(`https://api.openai.com/v1/videos/${videoId}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${env.openaiApiKey}`,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json() as { error?: { message?: string } };
+        throw new Error(error.error?.message || 'Failed to get video status');
+      }
+
+      const video = await response.json() as {
+        id: string;
+        status: string;
+        model: string;
+        progress?: number;
+        seconds: string;
+        size: string;
+        created_at: number;
+        error?: { message?: string };
+      };
+
+      return {
+        id: video.id,
+        status: video.status,
+        model: video.model,
+        progress: video.progress || 0,
+        seconds: video.seconds,
+        size: video.size,
+        createdAt: video.created_at,
+        error: video.error,
+      };
+    } catch (error: any) {
+      console.error('OpenAI video status error:', error);
+      throw new Error(`OpenAI API error: ${error.message || error.error?.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Download video content
+   */
+  static async downloadVideo(videoId: string, variant: 'video' | 'thumbnail' | 'spritesheet' = 'video') {
+    try {
+      const response = await fetch(`https://api.openai.com/v1/videos/${videoId}/content?variant=${variant}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${env.openaiApiKey}`,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Failed to download video: ${error}`);
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      return buffer;
+    } catch (error: any) {
+      console.error('OpenAI video download error:', error);
+      throw new Error(`OpenAI API error: ${error.message || error.error?.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Create and poll video until completion
+   */
+  static async createAndPollVideo(
+    prompt: string,
+    model: 'sora-2' | 'sora-2-pro' = 'sora-2',
+    size: string = '1280x720',
+    seconds: number = 8,
+    inputReference?: Buffer,
+    onProgress?: (progress: number, status: string) => void
+  ) {
+    try {
+      // Create the video job
+      const video = await this.createVideo(prompt, model, size, seconds, inputReference);
+
+      // Poll until completion
+      let currentVideo = video;
+      const maxAttempts = 300; // 10 minutes max (300 * 2 seconds)
+      let attempts = 0;
+
+      while (
+        (currentVideo.status === 'queued' || currentVideo.status === 'in_progress') &&
+        attempts < maxAttempts
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds
+
+        currentVideo = await this.getVideoStatus(currentVideo.id);
+        
+        if (onProgress) {
+          onProgress(currentVideo.progress || 0, currentVideo.status);
+        }
+
+        attempts++;
+      }
+
+      if (currentVideo.status === 'failed') {
+        throw new Error((currentVideo as any).error?.message || 'Video generation failed');
+      }
+
+      if (currentVideo.status !== 'completed') {
+        throw new Error(`Video generation timed out. Status: ${currentVideo.status}`);
+      }
+
+      return currentVideo;
+    } catch (error: any) {
+      console.error('OpenAI video create and poll error:', error);
+      throw error;
+    }
+  }
 }
