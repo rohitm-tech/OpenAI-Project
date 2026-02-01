@@ -62,6 +62,8 @@ export default function ChatInterface({
   const audioChunksRef = useRef<Blob[]>([]);
   const recognitionRef = useRef<any>(null);
   const realtimeMessagesRef = useRef<{ role: 'user' | 'assistant'; content: string; type: string }[]>([]);
+  const isSendingMessageRef = useRef(false);
+  const newlyCreatedConversationIdRef = useRef<string | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -93,16 +95,37 @@ export default function ChatInterface({
   // Load conversation when conversationId changes
   useEffect(() => {
     if (conversationId) {
-      loadConversation(conversationId);
+      // Don't load if this is a conversation we just created (it will be empty)
+      if (conversationId === newlyCreatedConversationIdRef.current) {
+        // Clear the ref after a short delay to allow messages to be added
+        setTimeout(() => {
+          newlyCreatedConversationIdRef.current = null;
+        }, 1000);
+        return; // Don't load empty conversation
+      }
+      
+      // Only load conversation if we're not currently streaming, creating a conversation, or sending a message
+      // This prevents clearing messages that are being streamed
+      if (!isStreaming && !isCreatingConversation && !isSendingMessageRef.current) {
+        loadConversation(conversationId);
+      }
     } else {
-      setMessages([]);
+      // Only clear messages if we're not currently streaming or sending
+      if (!isStreaming && !isCreatingConversation && !isSendingMessageRef.current) {
+        setMessages([]);
+      }
     }
-  }, [conversationId]);
+  }, [conversationId, isStreaming, isCreatingConversation]);
 
   const loadConversation = async (id: string) => {
     try {
+      // Don't load if this is a newly created conversation (it will be empty)
+      if (id === newlyCreatedConversationIdRef.current) {
+        return;
+      }
+      
       const response = await conversationService.getById(id);
-      if (response.success && response.data.messages) {
+      if (response.success && response.data.messages && response.data.messages.length > 0) {
         const loadedMessages: Message[] = response.data.messages.map((msg) => ({
           role: msg.role as 'user' | 'assistant',
           content: msg.content,
@@ -113,6 +136,7 @@ export default function ChatInterface({
         }));
         setMessages(loadedMessages);
       }
+      // If conversation has no messages, don't clear existing messages (they might be streaming)
     } catch (error) {
       console.error('Error loading conversation:', error);
     }
@@ -153,35 +177,55 @@ export default function ChatInterface({
 
     // Create a new conversation if one doesn't exist
     let currentConversationId = conversationId;
+    let shouldAddUserMessage = true;
+    
     if (!currentConversationId) {
       try {
         setIsCreatingConversation(true);
+        isSendingMessageRef.current = true; // Mark that we're sending a message
         const response = await conversationService.create();
         if (response.success) {
           currentConversationId = response.data._id;
+          // Track this as a newly created conversation to prevent loading it
+          newlyCreatedConversationIdRef.current = currentConversationId;
+          // Add user message to local state BEFORE updating conversationId to prevent race condition
+          const userMessage: Message = {
+            role: 'user',
+            content: input,
+            type: 'text',
+          };
+          setMessages((prev) => [...prev, userMessage]);
+          shouldAddUserMessage = false; // Already added
+          
+          // Now update the conversationId after messages are in state
           onConversationIdChange?.(currentConversationId);
           // Don't call onNewConversation here - it would create another empty conversation
         }
       } catch (error) {
         console.error('Error creating conversation:', error);
         setIsCreatingConversation(false);
+        isSendingMessageRef.current = false;
         return; // Don't proceed if conversation creation failed
       } finally {
         setIsCreatingConversation(false);
       }
     }
 
-    const userMessage: Message = {
-      role: 'user',
-      content: input,
-      type: 'text',
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
+    // Add user message if we didn't already add it (when creating conversation)
+    if (shouldAddUserMessage) {
+      const userMessage: Message = {
+        role: 'user',
+        content: input,
+        type: 'text',
+      };
+      setMessages((prev) => [...prev, userMessage]);
+    }
+    
     const prompt = input;
     setInput('');
     setIsLoading(true);
     setIsStreaming(true);
+    isSendingMessageRef.current = true; // Mark that we're sending a message
 
     const assistantMessage: Message = {
       role: 'assistant',
@@ -218,6 +262,7 @@ export default function ChatInterface({
         async (fullText) => {
           setIsStreaming(false);
           setIsLoading(false);
+          isSendingMessageRef.current = false; // Mark that we're done sending
           
           // Save messages to conversation
           if (currentConversationId) {
@@ -225,6 +270,14 @@ export default function ChatInterface({
               { role: 'user', content: prompt, type: 'text' },
               { role: 'assistant', content: fullText, type: 'text' },
             ], currentConversationId);
+            
+            // Clear the newly created conversation ref after messages are saved
+            if (currentConversationId === newlyCreatedConversationIdRef.current) {
+              // Wait a bit to ensure messages are saved, then clear the ref
+              setTimeout(() => {
+                newlyCreatedConversationIdRef.current = null;
+              }, 500);
+            }
           }
           
           // Automatically speak the response if audio is enabled
@@ -239,6 +292,7 @@ export default function ChatInterface({
           console.error('Stream error:', error);
           setIsStreaming(false);
           setIsLoading(false);
+          isSendingMessageRef.current = false; // Mark that we're done sending
           setMessages((prev) => {
             const newMessages = [...prev];
             const lastMessage = newMessages[newMessages.length - 1];
@@ -257,6 +311,7 @@ export default function ChatInterface({
       console.error('Error sending message:', error);
       setIsStreaming(false);
       setIsLoading(false);
+      isSendingMessageRef.current = false; // Mark that we're done sending
       setMessages((prev) => {
         const newMessages = [...prev];
         const lastMessage = newMessages[newMessages.length - 1];
