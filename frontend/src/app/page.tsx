@@ -142,7 +142,7 @@ export default function Home() {
       {/* About Section */}
       <section id="about" className="container px-4 py-24 bg-muted/50">
         <div className="max-w-3xl mx-auto text-center space-y-8">
-          <h2 className="text-3xl md:text-4xl font-bold">About OpenAI Interactions</h2>
+          <h2 className="text-3xl md:text-4xl font-bold">About MultimodAI</h2>
           <p className="text-lg text-muted-foreground">
             We're building the future of human-AI interaction. Our platform leverages 
             OpenAI's cutting-edge models to provide seamless, multi-modal AI experiences 
@@ -150,7 +150,7 @@ export default function Home() {
           </p>
           <p className="text-lg text-muted-foreground">
             Whether you're a developer, content creator, or business professional, 
-            our platform gives you the tools to interact with AI in ways that were 
+            MultimodAI gives you the tools to interact with AI in ways that were 
             previously impossible.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -172,7 +172,7 @@ export default function Home() {
               Ready to get started?
             </h2>
             <p className="text-xl text-primary-foreground/90 max-w-2xl mx-auto">
-              Join thousands of users who are already using OpenAI Interactions 
+              Join thousands of users who are already using MultimodAI 
               to transform their workflows.
             </p>
             <Link href="/signup">

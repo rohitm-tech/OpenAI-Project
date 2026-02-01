@@ -12,7 +12,7 @@ export default function Footer() {
               <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
                 <span className="text-primary-foreground font-bold text-lg">AI</span>
               </div>
-              <span className="font-bold text-lg">OpenAI Interactions</span>
+              <span className="font-bold text-lg">MultimodAI</span>
             </div>
             <p className="text-sm text-muted-foreground">
               Interact with AI through text, images, and voice in real-time. 
@@ -147,7 +147,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-8 pt-8 border-t text-center text-sm text-muted-foreground">
-          <p>© {new Date().getFullYear()} OpenAI Interactions. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} MultimodAI. All rights reserved.</p>
         </div>
       </div>
     </footer>

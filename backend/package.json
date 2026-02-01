@@ -1,7 +1,7 @@
 {
-  "name": "openai-interaction-backend",
+  "name": "multimodai-backend",
   "version": "1.0.0",
-  "description": "Backend for OpenAI multi-modal interaction platform",
+  "description": "Backend for MultimodAI - Multi-Modal AI Platform",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

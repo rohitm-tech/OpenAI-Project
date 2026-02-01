@@ -8,7 +8,7 @@ import Footer from '@/components/Footer';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'OpenAI Interactions - Multi-Modal AI Platform',
+  title: 'MultimodAI - Multi-Modal AI Platform',
   description: 'Interact with AI through text, images, and voice in real-time. Powered by OpenAI\'s latest models.',
 };
 

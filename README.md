@@ -1,6 +1,6 @@
-# OpenAI Multi-Modal Interaction Platform
+# MultimodAI
 
-A full-stack application for interacting with OpenAI's API through multiple modalities including text, images, and voice in real-time.
+A full-stack multi-modal AI platform for interacting with OpenAI's API through multiple modalities including text, images, and voice in real-time.
 
 ## 🚀 Features
 

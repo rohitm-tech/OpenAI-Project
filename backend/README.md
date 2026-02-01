@@ -1,4 +1,4 @@
-# OpenAI Interaction Backend
+# MultimodAI Backend
 
 Express TypeScript backend for multi-modal AI interactions using OpenAI API.
 

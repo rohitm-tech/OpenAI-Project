@@ -27,7 +27,7 @@ export default function Header() {
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
               <span className="text-primary-foreground font-bold text-lg">AI</span>
             </div>
-            <span className="font-bold text-xl">OpenAI Interactions</span>
+            <span className="font-bold text-xl">MultimodAI</span>
           </Link>
         </div>
 
