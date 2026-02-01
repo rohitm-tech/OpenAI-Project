@@ -131,4 +131,9 @@ export const aiService = {
     });
     return response.data;
   },
+
+  createRealtimeClientSecret: async (data: { voice?: string; instructions?: string }) => {
+    const response = await api.post('/ai/realtime/client-secret', data);
+    return response.data;
+  },
 };

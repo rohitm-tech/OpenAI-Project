@@ -8,6 +8,7 @@ import {
   textToSpeech,
   speechToText,
 } from '../controllers/aiController';
+import { createRealtimeClientSecret } from '../controllers/realtimeController';
 import multer from 'multer';
 
 const router = Router();
@@ -32,5 +33,8 @@ router.post('/image/generate', generateImage);
 // Audio operations
 router.post('/audio/text-to-speech', textToSpeech);
 router.post('/audio/speech-to-text', upload.single('audio'), speechToText);
+
+// Realtime API
+router.post('/realtime/client-secret', createRealtimeClientSecret);
 
 export default router;

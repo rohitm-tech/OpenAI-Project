@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Send, Image, Mic, Loader2, Square, Sparkles, Wand2 } from 'lucide-react';
+import { Send, Image, Mic, Loader2, Square, Sparkles, Wand2, Volume2, VolumeX } from 'lucide-react';
 import { aiService, TextRequest } from '@/services/ai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -31,6 +31,14 @@ export default function ChatInterface({
   const [isStreaming, setIsStreaming] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [generateImageMode, setGenerateImageMode] = useState(false);
+  const [isRealtimeMode, setIsRealtimeMode] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const realtimeConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -49,6 +57,12 @@ export default function ChatInterface({
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
 
+    // Check if we're in image generation mode
+    if (generateImageMode) {
+      await handleGenerateImage();
+      return;
+    }
+
     const userMessage: Message = {
       role: 'user',
       content: input,
@@ -56,6 +70,7 @@ export default function ChatInterface({
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const prompt = input;
     setInput('');
     setIsLoading(true);
     setIsStreaming(true);
@@ -71,7 +86,7 @@ export default function ChatInterface({
 
     try {
       const request: TextRequest = {
-        input: userMessage.content,
+        input: prompt,
         conversationId,
       };
 
@@ -88,9 +103,17 @@ export default function ChatInterface({
             return newMessages;
           });
         },
-        (fullText) => {
+        async (fullText) => {
           setIsStreaming(false);
           setIsLoading(false);
+          
+          // Automatically speak the response if audio is enabled
+          if (audioEnabled && fullText && fullText.trim()) {
+            // Small delay to ensure message is displayed first
+            setTimeout(async () => {
+              await speakText(fullText);
+            }, 500);
+          }
         },
         (error) => {
           console.error('Stream error:', error);
@@ -177,7 +200,13 @@ export default function ChatInterface({
       });
     } finally {
       setIsLoading(false);
+      setGenerateImageMode(false);
     }
+  };
+
+  const handleGenerateImageClick = () => {
+    setGenerateImageMode(true);
+    inputRef.current?.focus();
   };
 
   const handleImageUpload = () => {
@@ -364,6 +393,404 @@ export default function ChatInterface({
     setIsRecording(false);
   };
 
+  const speakText = async (text: string) => {
+    try {
+      setIsPlayingAudio(true);
+      
+      // Clean up any existing audio
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+
+      // Remove markdown formatting for cleaner speech
+      const cleanText = text
+        .replace(/```[\s\S]*?```/g, '') // Remove code blocks
+        .replace(/`[^`]+`/g, '') // Remove inline code
+        .replace(/#{1,6}\s+/g, '') // Remove headers
+        .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
+        .replace(/\*([^*]+)\*/g, '$1') // Remove italic
+        .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1') // Remove links
+        .trim();
+
+      if (!cleanText) {
+        setIsPlayingAudio(false);
+        return;
+      }
+
+      // Generate audio
+      const audioBlob = await aiService.textToSpeech({
+        text: cleanText,
+        voice: 'alloy',
+        model: 'tts-1',
+      });
+
+      // Create audio URL and play
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        setIsPlayingAudio(false);
+        URL.revokeObjectURL(audioUrl);
+        audioRef.current = null;
+      };
+
+      audio.onerror = () => {
+        setIsPlayingAudio(false);
+        URL.revokeObjectURL(audioUrl);
+        audioRef.current = null;
+      };
+
+      await audio.play();
+    } catch (error: any) {
+      console.error('Error speaking text:', error);
+      setIsPlayingAudio(false);
+    }
+  };
+
+  const toggleAudio = () => {
+    setAudioEnabled(!audioEnabled);
+    
+    // Stop any currently playing audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+      setIsPlayingAudio(false);
+    }
+  };
+
+  const toggleRealtimeMode = async () => {
+    if (isRealtimeMode) {
+      // Disconnect
+      await disconnectRealtime();
+      setIsRealtimeMode(false);
+    } else {
+      // Connect
+      try {
+        await connectRealtime();
+        setIsRealtimeMode(true);
+      } catch (error: any) {
+        console.error('Error connecting to realtime:', error);
+        alert(`Failed to connect: ${error.message || 'Unknown error'}`);
+      }
+    }
+  };
+
+  const connectRealtime = async () => {
+    let ws: WebSocket | null = null;
+    let pc: RTCPeerConnection | null = null;
+    let keepAliveInterval: NodeJS.Timeout | null = null;
+    
+    try {
+      // Get client secret from backend
+      const response = await aiService.createRealtimeClientSecret({
+        voice: 'alloy',
+        instructions: 'You are a helpful assistant. Be conversational and natural.',
+      });
+
+      const clientSecret = response.data?.clientSecret;
+      if (!clientSecret) {
+        throw new Error('Failed to get client secret');
+      }
+
+      // Initialize WebSocket connection FIRST for events
+      // Note: Browsers don't support custom headers in WebSocket, so we pass client secret in URL
+      const wsUrl = `wss://api.openai.com/v1/realtime?model=gpt-realtime&client_secret=${encodeURIComponent(clientSecret)}`;
+      ws = new WebSocket(wsUrl);
+      
+      // Wait for WebSocket to open
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('WebSocket connection timeout'));
+        }, 10000);
+
+        ws!.onopen = () => {
+          clearTimeout(timeout);
+          console.log('Realtime WebSocket connected');
+          resolve();
+        };
+
+        ws!.onerror = (error) => {
+          clearTimeout(timeout);
+          console.error('WebSocket connection error:', error);
+          reject(new Error('WebSocket connection failed'));
+        };
+      });
+
+      // Configure session immediately after connection
+      try {
+        ws.send(
+          JSON.stringify({
+            type: 'session.update',
+            session: {
+              type: 'realtime',
+              instructions: 'You are a helpful assistant. Be conversational and natural.',
+              audio: {
+                output: { voice: 'alloy' },
+              },
+            },
+          })
+        );
+        console.log('Session update sent');
+      } catch (error) {
+        console.error('Error sending session update:', error);
+      }
+
+      // Get user media (microphone)
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        }
+      });
+      localStreamRef.current = stream;
+
+      // Create RTCPeerConnection
+      pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+        ],
+      });
+      realtimeConnectionRef.current = pc;
+
+      // Add local audio track
+      stream.getTracks().forEach((track) => {
+        pc!.addTrack(track, stream);
+      });
+
+      // Handle connection state changes
+      pc.onconnectionstatechange = () => {
+        console.log('RTC connection state:', pc!.connectionState);
+        if (pc!.connectionState === 'failed') {
+          console.warn('RTC connection failed');
+        } else if (pc!.connectionState === 'disconnected') {
+          console.warn('RTC connection disconnected');
+        }
+      };
+
+      // Handle ICE connection state
+      pc.oniceconnectionstatechange = () => {
+        console.log('ICE connection state:', pc!.iceConnectionState);
+        if (pc!.iceConnectionState === 'failed') {
+          console.warn('ICE connection failed');
+        }
+      };
+
+      // Handle ICE candidates
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          console.log('ICE candidate generated');
+        } else {
+          console.log('ICE gathering complete');
+        }
+      };
+
+      // Handle remote audio
+      pc.ontrack = (event) => {
+        console.log('Received remote track:', event.track.kind);
+        const [remoteStream] = event.streams;
+        remoteStreamRef.current = remoteStream;
+        
+        // Play remote audio
+        const audio = new Audio();
+        audio.srcObject = remoteStream;
+        audio.autoplay = true;
+        audio.play().catch((error) => {
+          console.error('Error playing remote audio:', error);
+        });
+      };
+
+      // Create offer with proper constraints
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false,
+      });
+      await pc.setLocalDescription(offer);
+
+      // Send SDP to OpenAI Realtime API
+      const sdpResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${clientSecret}`,
+          'Content-Type': 'application/sdp',
+        },
+        body: offer.sdp,
+      });
+
+      if (!sdpResponse.ok) {
+        const errorText = await sdpResponse.text();
+        console.error('SDP response error:', sdpResponse.status, errorText);
+        throw new Error(`Failed to establish RTC connection: ${sdpResponse.status}`);
+      }
+
+      const answerSdp = await sdpResponse.text();
+      const answer = { type: 'answer' as RTCSdpType, sdp: answerSdp };
+      await pc.setRemoteDescription(answer);
+      console.log('RTC connection established');
+
+      // WebSocket handlers (already set up above, but add message handlers)
+
+      // Set up WebSocket message handlers
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          // Only log important events to reduce console noise
+          if (data.type !== 'input_audio_buffer.speech_started' && 
+              data.type !== 'input_audio_buffer.speech_stopped' &&
+              data.type !== 'response.audio_transcript.delta') {
+            console.log('Realtime event:', data.type);
+          }
+
+          // Handle error events
+          if (data.type === 'error') {
+            console.error('Realtime API error:', data.error);
+            // Log the error but don't disconnect - some errors are recoverable
+            if (data.error?.message) {
+              console.error('Error details:', data.error.message);
+            }
+            // Don't return - continue processing
+          }
+
+          // Handle session events
+          if (data.type === 'session.created' || data.type === 'session.updated') {
+            console.log('Session ready:', data.type);
+          }
+
+          // Handle different event types
+          if (data.type === 'response.output_text.delta') {
+            // Text output (optional, for display)
+            const text = data.delta;
+            if (text) {
+              setMessages((prev) => {
+                const newMessages = [...prev];
+                const lastMessage = newMessages[newMessages.length - 1];
+                if (lastMessage && lastMessage.role === 'assistant') {
+                  lastMessage.content += text;
+                } else {
+                  newMessages.push({
+                    role: 'assistant',
+                    content: text,
+                    type: 'text',
+                  });
+                }
+                return newMessages;
+              });
+            }
+          } else if (data.type === 'response.output_audio.delta') {
+            // Audio is handled by WebRTC
+          } else if (data.type === 'conversation.item.added') {
+            // New conversation item
+            if (data.item?.type === 'message' && data.item.role === 'assistant') {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: 'assistant',
+                  content: data.item.content?.[0]?.text || '',
+                  type: 'text',
+                },
+              ]);
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error, event.data);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error event:', error);
+        // Don't automatically disconnect - let onclose handle it
+      };
+
+      ws.onclose = (event) => {
+        console.log('WebSocket closed:', event.code, event.reason, event.wasClean);
+        
+        // Clear keepalive interval
+        if (keepAliveInterval) {
+          clearInterval(keepAliveInterval);
+          keepAliveInterval = null;
+        }
+        
+        // Only disconnect if it wasn't intentional (code 1000) or user-initiated
+        if (event.code !== 1000 && isRealtimeMode) {
+          console.warn('Unexpected WebSocket close, disconnecting...');
+          setIsRealtimeMode(false);
+          // Clean up resources
+          setTimeout(() => {
+            disconnectRealtime();
+          }, 100);
+        }
+      };
+
+      // Add keepalive to prevent connection timeout
+      keepAliveInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try {
+            // Send a ping or session update to keep connection alive
+            ws.send(JSON.stringify({ type: 'session.update', session: {} }));
+          } catch (error) {
+            console.error('Error sending keepalive:', error);
+          }
+        }
+      }, 30000); // Every 30 seconds
+
+      // Store WebSocket and interval references in the PC object for cleanup
+      (pc as any).ws = ws;
+      (pc as any).keepAliveInterval = keepAliveInterval;
+    } catch (error: any) {
+      console.error('Error connecting to realtime:', error);
+      throw error;
+    }
+  };
+
+  const disconnectRealtime = async () => {
+    try {
+      // Clear keepalive interval
+      if (realtimeConnectionRef.current && (realtimeConnectionRef.current as any).keepAliveInterval) {
+        clearInterval((realtimeConnectionRef.current as any).keepAliveInterval);
+        (realtimeConnectionRef.current as any).keepAliveInterval = null;
+      }
+
+      // Close WebSocket gracefully
+      if (realtimeConnectionRef.current && (realtimeConnectionRef.current as any).ws) {
+        const ws = (realtimeConnectionRef.current as any).ws;
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close(1000, 'User disconnected');
+        }
+        (realtimeConnectionRef.current as any).ws = null;
+      }
+
+      // Close RTCPeerConnection
+      if (realtimeConnectionRef.current) {
+        realtimeConnectionRef.current.close();
+        realtimeConnectionRef.current = null;
+      }
+
+      // Stop local stream
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => {
+          track.stop();
+          track.enabled = false;
+        });
+        localStreamRef.current = null;
+      }
+
+      // Stop remote stream
+      if (remoteStreamRef.current) {
+        remoteStreamRef.current.getTracks().forEach((track) => {
+          track.stop();
+          track.enabled = false;
+        });
+        remoteStreamRef.current = null;
+      }
+    } catch (error) {
+      console.error('Error disconnecting realtime:', error);
+    }
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -373,8 +800,15 @@ export default function ChatInterface({
       if (mediaRecorderRef.current) {
         mediaRecorderRef.current.stop();
       }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (isRealtimeMode) {
+        disconnectRealtime();
+      }
     };
-  }, []);
+  }, [isRealtimeMode]);
 
   return (
     <div className="flex flex-col h-full">
@@ -420,10 +854,33 @@ export default function ChatInterface({
                     <span className="text-sm">Thinking...</span>
                   </div>
                 ) : message.role === 'assistant' ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-p:leading-relaxed prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {message.content}
-                    </ReactMarkdown>
+                  <div className="space-y-2">
+                    <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-p:leading-relaxed prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                    {message.content && !message.isLoading && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => speakText(message.content)}
+                        disabled={isPlayingAudio}
+                      >
+                        {isPlayingAudio ? (
+                          <>
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            Speaking...
+                          </>
+                        ) : (
+                          <>
+                            <Volume2 className="h-3 w-3 mr-1" />
+                            Speak
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
                 ) : message.type === 'image' ? (
                   <div className="space-y-3">
@@ -471,49 +928,103 @@ export default function ChatInterface({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="border-t bg-muted/30 backdrop-blur-sm p-4">
-        {selectedImage && (
-          <div className="mb-3 relative inline-block group">
-            <div className="relative">
-              <img
-                src={selectedImage}
-                alt="Selected"
-                className="max-w-[200px] h-auto rounded-lg border-2 border-primary/30 shadow-md transition-transform group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-black/40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <Button
-                  variant="destructive"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setSelectedImage(null)}
-                >
-                  ×
-                </Button>
-              </div>
-            </div>
-            <div className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full shadow-lg">
-              Ready
-            </div>
-          </div>
-        )}
-        <div className="flex gap-3 items-end">
-          <div className="flex-1 relative">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type your message or ask about the image..."
-              className="w-full min-h-[60px] max-h-[200px] p-4 border-2 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary/50 bg-background shadow-sm transition-all"
-              disabled={isLoading}
-            />
-            {isRecording && (
-              <div className="absolute bottom-2 left-4 flex items-center gap-2 text-destructive text-sm font-medium">
-                <div className="h-2 w-2 bg-destructive rounded-full animate-pulse" />
-                Recording...
-              </div>
+      <div className="border-t bg-muted/30 backdrop-blur-sm">
+        {/* Toolbar */}
+        <div className="px-4 pt-3 pb-2 flex items-center gap-2 flex-wrap border-b">
+          <Button
+            variant={audioEnabled ? 'default' : 'outline'}
+            size="sm"
+            title={audioEnabled ? 'Disable Audio Output' : 'Enable Audio Output'}
+            onClick={toggleAudio}
+            disabled={isLoading}
+            className={`text-xs transition-all ${
+              audioEnabled
+                ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                : ''
+            }`}
+          >
+            {audioEnabled ? (
+              <>
+                <Volume2 className="h-3 w-3 mr-1.5" />
+                Audio On
+              </>
+            ) : (
+              <>
+                <VolumeX className="h-3 w-3 mr-1.5" />
+                Audio Off
+              </>
             )}
-          </div>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            title="Upload Image"
+            onClick={handleImageUpload}
+            disabled={isLoading}
+            className="text-xs"
+          >
+            <Image className="h-3 w-3 mr-1.5" />
+            Upload Image
+          </Button>
+          <Button
+            variant={generateImageMode ? 'default' : 'outline'}
+            size="sm"
+            title={generateImageMode ? 'Click Send to generate image' : 'Generate Image'}
+            onClick={handleGenerateImageClick}
+            disabled={isLoading}
+            className={`text-xs ${generateImageMode ? 'bg-pink-500 hover:bg-pink-600 text-white' : ''}`}
+          >
+            <Wand2 className="h-3 w-3 mr-1.5" />
+            {generateImageMode ? 'Generate Image ✓' : 'Generate Image'}
+          </Button>
+          <Button
+            variant={isRecording ? 'destructive' : 'outline'}
+            size="sm"
+            title={isRecording ? 'Stop Recording' : 'Voice Input'}
+            onClick={handleVoiceInput}
+            disabled={isLoading || isRealtimeMode}
+            className={`text-xs transition-all ${
+              isRecording 
+                ? 'animate-pulse' 
+                : ''
+            }`}
+          >
+            {isRecording ? (
+              <>
+                <Square className="h-3 w-3 mr-1.5" />
+                Stop Recording
+              </>
+            ) : (
+              <>
+                <Mic className="h-3 w-3 mr-1.5" />
+                Voice Input
+              </>
+            )}
+          </Button>
+          <Button
+            variant={isRealtimeMode ? 'default' : 'outline'}
+            size="sm"
+            title={isRealtimeMode ? 'Disconnect Speech-to-Speech' : 'Enable Speech-to-Speech'}
+            onClick={toggleRealtimeMode}
+            disabled={isLoading || isRecording}
+            className={`text-xs transition-all ${
+              isRealtimeMode
+                ? 'bg-orange-500 hover:bg-orange-600 text-white animate-pulse'
+                : ''
+            }`}
+          >
+            {isRealtimeMode ? (
+              <>
+                <Square className="h-3 w-3 mr-1.5" />
+                Speech Mode
+              </>
+            ) : (
+              <>
+                <Mic className="h-3 w-3 mr-1.5" />
+                Speech-to-Speech
+              </>
+            )}
+          </Button>
           <input
             ref={fileInputRef}
             type="file"
@@ -521,7 +1032,57 @@ export default function ChatInterface({
             className="hidden"
             onChange={handleFileChange}
           />
-          <div className="flex flex-col gap-2">
+        </div>
+
+        {/* Input Area */}
+        <div className="p-4">
+          {selectedImage && (
+            <div className="mb-3 relative inline-block group">
+              <div className="relative">
+                <img
+                  src={selectedImage}
+                  alt="Selected"
+                  className="max-w-[200px] h-auto rounded-lg border-2 border-primary/30 shadow-md transition-transform group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-black/40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setSelectedImage(null)}
+                  >
+                    ×
+                  </Button>
+                </div>
+              </div>
+              <div className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full shadow-lg">
+                Ready
+              </div>
+            </div>
+          )}
+          <div className="flex gap-3 items-end">
+            <div className="flex-1 relative">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder={generateImageMode ? "Describe the image you want to generate..." : "Type your message..."}
+                className="w-full min-h-[60px] max-h-[200px] p-4 border-2 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary/50 bg-background shadow-sm transition-all"
+                disabled={isLoading}
+              />
+              {generateImageMode && (
+                <div className="absolute top-2 right-2 bg-pink-500 text-white text-xs px-2 py-1 rounded-full font-medium shadow-lg">
+                  ✨ Image Mode
+                </div>
+              )}
+              {isRecording && (
+                <div className="absolute bottom-2 left-4 flex items-center gap-2 text-destructive text-sm font-medium">
+                  <div className="h-2 w-2 bg-destructive rounded-full animate-pulse" />
+                  Recording...
+                </div>
+              )}
+            </div>
             <Button
               onClick={handleSend}
               disabled={(!input.trim() && !selectedImage) || isLoading}
@@ -534,46 +1095,6 @@ export default function ChatInterface({
                 <Send className="h-5 w-5" />
               )}
             </Button>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                title="Upload Image"
-                onClick={handleImageUpload}
-                disabled={isLoading}
-                className="h-10 w-10 hover:bg-purple-50 dark:hover:bg-purple-950/20 hover:border-purple-300 transition-all"
-              >
-                <Image className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                title="Generate Image"
-                onClick={handleGenerateImage}
-                disabled={!input.trim() || isLoading}
-                className="h-10 w-10 hover:bg-pink-50 dark:hover:bg-pink-950/20 hover:border-pink-300 transition-all"
-              >
-                <Wand2 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={isRecording ? 'destructive' : 'outline'}
-                size="icon"
-                title={isRecording ? 'Stop Recording' : 'Voice Input'}
-                onClick={handleVoiceInput}
-                disabled={isLoading}
-                className={`h-10 w-10 transition-all ${
-                  isRecording 
-                    ? 'animate-pulse shadow-lg shadow-destructive/50' 
-                    : 'hover:bg-green-50 dark:hover:bg-green-950/20 hover:border-green-300'
-                }`}
-              >
-                {isRecording ? (
-                  <Square className="h-4 w-4" />
-                ) : (
-                  <Mic className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
           </div>
         </div>
       </div>
