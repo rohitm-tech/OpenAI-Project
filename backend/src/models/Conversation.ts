@@ -68,7 +68,7 @@ const ConversationSchema = new Schema<IConversation>(
     },
     model: {
       type: String,
-      default: 'gpt-5',
+      default: 'gpt-4o',
     },
   },
   {

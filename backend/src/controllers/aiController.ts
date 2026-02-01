@@ -72,68 +72,99 @@ export const generateTextStream = async (req: AuthRequest, res: Response) => {
     const { input, instructions, model, conversationId } =
       textRequestSchema.parse(req.body);
 
+    // Set SSE headers before any response
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable buffering in nginx
 
     const stream = await OpenAIService.generateTextStream(
       input,
       instructions,
-      model
+      model || 'gpt-4o'
     );
 
     let fullResponse = '';
 
-    for await (const event of stream) {
-      if (event.type === 'response.output_text.delta') {
-        const delta = (event as any).delta;
-        fullResponse += delta;
-        res.write(`data: ${JSON.stringify({ delta, type: 'text' })}\n\n`);
-      } else if (event.type === 'response.completed') {
-        const response = (event as any).response;
-        res.write(
-          `data: ${JSON.stringify({ type: 'done', response })}\n\n`
-        );
-
-        // Save to conversation
-        if (conversationId && req.userId) {
-          await Conversation.findByIdAndUpdate(conversationId, {
-            $push: {
-              messages: {
-                role: 'user',
-                content:
-                  typeof input === 'string' ? input : JSON.stringify(input),
-                type: 'text',
-                timestamp: new Date(),
-              },
-            },
-          });
-
-          await Conversation.findByIdAndUpdate(conversationId, {
-            $push: {
-              messages: {
-                role: 'assistant',
-                content: fullResponse,
-                type: 'text',
-                timestamp: new Date(),
-              },
-            },
-          });
+    try {
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content || '';
+        if (delta) {
+          fullResponse += delta;
+          res.write(`data: ${JSON.stringify({ delta, type: 'text' })}\n\n`);
         }
 
-        res.end();
-      } else if (event.type === 'response.error') {
-        res.write(
-          `data: ${JSON.stringify({ type: 'error', error: (event as any).error })}\n\n`
-        );
-        res.end();
+        // Check if this is the final chunk
+        if (chunk.choices[0]?.finish_reason) {
+          res.write(
+            `data: ${JSON.stringify({ type: 'done', response: fullResponse })}\n\n`
+          );
+
+          // Save to conversation
+          if (conversationId && req.userId) {
+            try {
+              await Conversation.findByIdAndUpdate(conversationId, {
+                $push: {
+                  messages: {
+                    role: 'user',
+                    content:
+                      typeof input === 'string' ? input : JSON.stringify(input),
+                    type: 'text',
+                    timestamp: new Date(),
+                  },
+                },
+              });
+
+              await Conversation.findByIdAndUpdate(conversationId, {
+                $push: {
+                  messages: {
+                    role: 'assistant',
+                    content: fullResponse,
+                    type: 'text',
+                    timestamp: new Date(),
+                  },
+                },
+              });
+            } catch (dbError) {
+              console.error('Error saving conversation:', dbError);
+            }
+          }
+
+          res.end();
+          return;
+        }
       }
+    } catch (streamError: any) {
+      console.error('Stream error:', streamError);
+      res.write(
+        `data: ${JSON.stringify({ type: 'error', error: streamError.message || 'Stream processing error' })}\n\n`
+      );
+      res.end();
+      return;
     }
   } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      error: error.message,
-    });
+    console.error('Stream controller error:', error);
+    
+    // If headers haven't been sent, send JSON error
+    if (!res.headersSent) {
+      // Check if it's a rate limit or quota error
+      const statusCode = error.message?.includes('quota') || error.message?.includes('Rate limit') 
+        ? 429 
+        : error.message?.includes('Invalid OpenAI API key')
+        ? 401
+        : 400;
+        
+      res.status(statusCode).json({
+        success: false,
+        error: error.message || 'Invalid request',
+      });
+    } else {
+      // If headers are already sent (SSE), send error via SSE
+      res.write(
+        `data: ${JSON.stringify({ type: 'error', error: error.message || 'Invalid request' })}\n\n`
+      );
+      res.end();
+    }
   }
 };
 

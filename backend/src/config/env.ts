@@ -1,6 +1,37 @@
 import dotenv from 'dotenv';
+import path from 'path';
 
-dotenv.config();
+// Load .env file from the backend directory
+// When compiled, __dirname will be in dist/config, so go up two levels
+// When running with tsx, __dirname will be in src/config, so go up two levels
+const envPath = path.resolve(__dirname, '../../.env');
+const result = dotenv.config({ path: envPath });
+
+// Also try loading from process.cwd() as fallback (for different execution contexts)
+if (result.error) {
+  const fallbackPath = path.resolve(process.cwd(), '.env');
+  const fallbackResult = dotenv.config({ path: fallbackPath });
+  
+  if (fallbackResult.error) {
+    console.warn('⚠️  Warning: .env file not found. Using environment variables or defaults.');
+    console.warn(`   Tried: ${envPath}`);
+    console.warn(`   Tried: ${fallbackPath}`);
+  }
+}
+
+// Validate required environment variables
+const requiredEnvVars = ['OPENAI_API_KEY', 'MONGODB_URI', 'JWT_SECRET'];
+
+const missingVars = requiredEnvVars.filter((varName) => !process.env[varName]);
+
+if (missingVars.length > 0) {
+  console.error('❌ Missing required environment variables:');
+  missingVars.forEach((varName) => {
+    console.error(`   - ${varName}`);
+  });
+  console.error(`\n   Please create a .env file in the backend directory with these variables.`);
+  console.error(`   Expected location: ${envPath}\n`);
+}
 
 export const env = {
   port: parseInt(process.env.PORT || '3001', 10),
@@ -21,3 +52,11 @@ export const env = {
     uploadPath: process.env.UPLOAD_PATH || './uploads',
   },
 };
+
+// Log API key status (without exposing the key)
+if (env.openaiApiKey) {
+  const keyPreview = env.openaiApiKey.substring(0, 7) + '...' + env.openaiApiKey.substring(env.openaiApiKey.length - 4);
+  console.log(`✅ OpenAI API Key loaded: ${keyPreview}`);
+} else {
+  console.error('❌ OpenAI API Key is missing! Please set OPENAI_API_KEY in your .env file.');
+}

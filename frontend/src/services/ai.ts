@@ -50,7 +50,15 @@ export const aiService = {
       });
 
       if (!response.ok) {
-        throw new Error('Stream request failed');
+        const errorText = await response.text();
+        let errorMessage = 'Stream request failed';
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
       const reader = response.body?.getReader();
