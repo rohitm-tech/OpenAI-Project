@@ -30,22 +30,105 @@ export const createConversation = async (req: AuthRequest, res: Response) => {
 
 export const getConversations = async (req: AuthRequest, res: Response) => {
   try {
-    const conversations = await Conversation.find({
-      userId: req.userId,
-    })
-      .sort({ updatedAt: -1 })
-      .select('title createdAt updatedAt model')
-      .limit(50);
+    const { search } = req.query;
+    
+    let conversations;
+    
+    if (search && typeof search === 'string' && search.trim()) {
+      // Search conversations by title or message content
+      const searchRegex = new RegExp(search.trim(), 'i');
+      
+      // First, find conversations matching the title
+      const conversationsByTitle = await Conversation.find({
+        userId: req.userId,
+        title: { $regex: searchRegex },
+      })
+        .select('_id')
+        .lean();
+      
+      const conversationIdsByTitle = conversationsByTitle.map((c) => c._id);
+      
+      // Find conversations with messages matching the search
+      const messages = await Message.find({
+        content: { $regex: searchRegex },
+      })
+        .select('conversationId')
+        .lean();
+      
+      const conversationIdsByMessage = messages.map((m) => m.conversationId);
+      
+      // Combine both sets of conversation IDs
+      const allConversationIds = [...new Set([...conversationIdsByTitle, ...conversationIdsByMessage])];
+      
+      // Get all matching conversations that belong to the user
+      conversations = await Conversation.find({
+        userId: req.userId,
+        _id: { $in: allConversationIds },
+      })
+        .sort({ updatedAt: -1 })
+        .select('title createdAt updatedAt model')
+        .limit(50);
+    } else {
+      // No search query, return all conversations
+      conversations = await Conversation.find({
+        userId: req.userId,
+      })
+        .sort({ updatedAt: -1 })
+        .select('title createdAt updatedAt model')
+        .limit(50);
+    }
 
-    // Get message counts for each conversation
+    // Get message counts and search previews for each conversation
     const conversationsWithCounts = await Promise.all(
       conversations.map(async (conv) => {
         const messageCount = await Message.countDocuments({
           conversationId: conv._id,
         });
+        
+        let searchPreview = null;
+        if (search && typeof search === 'string' && search.trim()) {
+          // Find the first message that matches the search
+          const matchingMessage = await Message.findOne({
+            conversationId: conv._id,
+            content: { $regex: new RegExp(search.trim(), 'i') },
+          })
+            .sort({ createdAt: 1 })
+            .select('content role')
+            .lean();
+          
+          if (matchingMessage) {
+            // Create a preview snippet (first 100 chars around the match)
+            const content = matchingMessage.content;
+            const searchLower = search.trim().toLowerCase();
+            const contentLower = content.toLowerCase();
+            const matchIndex = contentLower.indexOf(searchLower);
+            
+            if (matchIndex !== -1) {
+              const start = Math.max(0, matchIndex - 30);
+              const end = Math.min(content.length, matchIndex + search.length + 70);
+              let preview = content.substring(start, end);
+              
+              if (start > 0) preview = '...' + preview;
+              if (end < content.length) preview = preview + '...';
+              
+              searchPreview = {
+                content: preview,
+                role: matchingMessage.role,
+              };
+            } else {
+              // Fallback: just show first 100 chars
+              searchPreview = {
+                content: content.substring(0, 100) + (content.length > 100 ? '...' : ''),
+                role: matchingMessage.role,
+              };
+            }
+          }
+        }
+        
         return {
           ...conv.toObject(),
           messageCount,
+          searchPreview,
         };
       })
     );

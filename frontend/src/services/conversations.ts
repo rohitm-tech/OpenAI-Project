@@ -18,6 +18,10 @@ export interface Conversation {
   title: string;
   messages?: Message[];
   messageCount?: number;
+  searchPreview?: {
+    content: string;
+    role: 'user' | 'assistant' | 'developer';
+  };
   model: string;
   createdAt: string;
   updatedAt: string;
@@ -32,11 +36,12 @@ export const conversationService = {
     return response.data;
   },
 
-  getAll: async () => {
+  getAll: async (search?: string) => {
+    const params = search ? { search } : {};
     const response = await api.get<{
       success: boolean;
       data: Conversation[];
-    }>('/conversations');
+    }>('/conversations', { params });
     return response.data;
   },
 

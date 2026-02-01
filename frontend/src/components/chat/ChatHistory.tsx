@@ -49,13 +49,18 @@ export default function ChatHistory({
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
 
   useEffect(() => {
-    loadConversations();
-  }, []);
+    // Debounce search to avoid too many API calls
+    const timeoutId = setTimeout(() => {
+      loadConversations();
+    }, searchQuery ? 300 : 0); // No delay if search is empty (initial load)
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   const loadConversations = async () => {
     try {
       setIsLoading(true);
-      const response = await conversationService.getAll();
+      const response = await conversationService.getAll(searchQuery.trim() || undefined);
       if (response.success) {
         setConversations(response.data);
       }
@@ -97,9 +102,8 @@ export default function ChatHistory({
     setConversationToDelete(null);
   };
 
-  const filteredConversations = conversations.filter((conv) =>
-    conv.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // No need to filter on frontend since backend handles search
+  const filteredConversations = conversations;
 
   // Group conversations by date
   const groupedConversations = filteredConversations.reduce((groups, conv) => {
@@ -251,9 +255,16 @@ export default function ChatHistory({
                         <p className="text-sm font-medium truncate">
                           {conv.title}
                         </p>
-                        <p className="text-xs text-muted-foreground">
-                          {conv.messageCount || 0} messages
-                        </p>
+                        {searchQuery && conv.searchPreview ? (
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            <span className="font-medium">{conv.searchPreview.role === 'user' ? 'You' : 'AI'}:</span>{' '}
+                            {conv.searchPreview.content}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            {conv.messageCount || 0} messages
+                          </p>
+                        )}
                       </div>
                       <Button
                         variant="ghost"
