@@ -126,14 +126,17 @@ export default function ChatInterface({
       
       const response = await conversationService.getById(id);
       if (response.success && response.data.messages && response.data.messages.length > 0) {
-        const loadedMessages: Message[] = response.data.messages.map((msg) => ({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-          type: (msg.type as 'text' | 'image' | 'audio' | 'generated-image' | 'video') || 'text',
-          imageUrl: msg.metadata?.imageUrl,
-          videoUrl: msg.metadata?.videoUrl,
-          videoId: msg.metadata?.videoId,
-        }));
+        const loadedMessages: Message[] = response.data.messages.map((msg) => {
+          const metadata = msg.metadata as { imageUrl?: string; videoUrl?: string; videoId?: string } | undefined;
+          return {
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content,
+            type: (msg.type as 'text' | 'image' | 'audio' | 'generated-image' | 'video') || 'text',
+            imageUrl: metadata?.imageUrl,
+            videoUrl: metadata?.videoUrl,
+            videoId: metadata?.videoId,
+          };
+        });
         setMessages(loadedMessages);
       }
       // If conversation has no messages, don't clear existing messages (they might be streaming)

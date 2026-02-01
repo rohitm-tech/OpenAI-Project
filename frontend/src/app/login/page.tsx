@@ -94,6 +94,28 @@ export default function LoginPage() {
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? 'Logging in...' : 'Login'}
               </Button>
+
+              {/* Test Account */}
+              <div className="flex items-center justify-between p-2 rounded-md border border-dashed bg-muted/30">
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium">Test Account</span>
+                  <span className="mx-1">·</span>
+                  <span className="font-mono">test@gmail.com</span>
+                  <span className="mx-1">/</span>
+                  <span className="font-mono">test@123</span>
+                </div>
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline font-medium"
+                  onClick={() => {
+                    setEmail('test@gmail.com');
+                    setPassword('test@123');
+                  }}
+                >
+                  Fill
+                </button>
+              </div>
+
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <span className="w-full border-t" />
