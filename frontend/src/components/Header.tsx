@@ -3,37 +3,19 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { useState, useEffect } from 'react';
-import { authService } from '@/services/auth';
+import { useState } from 'react';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { logoutUser } from '@/store/slices/authSlice';
 import { Menu, X, LogOut, User } from 'lucide-react';
 
 export default function Header() {
-  const [user, setUser] = useState<any>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const router = useRouter();
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        // Only check auth if we have a token to avoid unnecessary API calls
-        const token = localStorage.getItem('token');
-        if (!token) {
-          setUser(null);
-          return;
-        }
-        const response = await authService.getCurrentUser();
-        setUser(response.data.user);
-      } catch (error) {
-        // Silently fail - user is not authenticated
-        setUser(null);
-      }
-    };
-    checkAuth();
-  }, []);
+  const dispatch = useAppDispatch();
+  const { user, isAuthenticated } = useAppSelector((state) => state.auth);
 
   const handleLogout = async () => {
-    await authService.logout();
-    setUser(null);
+    await dispatch(logoutUser());
     router.push('/');
   };
 
@@ -58,12 +40,6 @@ export default function Header() {
             Features
           </Link>
           <Link
-            href="/#pricing"
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Pricing
-          </Link>
-          <Link
             href="/#about"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
@@ -72,12 +48,12 @@ export default function Header() {
         </nav>
 
         <div className="flex items-center gap-4">
-          {user ? (
+          {isAuthenticated ? (
             <>
               <Link href="/dashboard">
                 <Button variant="ghost" size="sm" className="hidden sm:flex">
                   <User className="h-4 w-4 mr-2" />
-                  Dashboard
+                  {user?.name || 'Dashboard'}
                 </Button>
               </Link>
               <Button variant="outline" size="sm" onClick={handleLogout}>
@@ -122,20 +98,13 @@ export default function Header() {
               Features
             </Link>
             <Link
-              href="/#pricing"
-              className="block text-sm font-medium"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              Pricing
-            </Link>
-            <Link
               href="/#about"
               className="block text-sm font-medium"
               onClick={() => setIsMenuOpen(false)}
             >
               About
             </Link>
-            {user ? (
+            {isAuthenticated ? (
               <>
                 <Link
                   href="/dashboard"

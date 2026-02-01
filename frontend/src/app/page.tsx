@@ -9,8 +9,7 @@ import {
   Shield, 
   Globe,
   Sparkles,
-  ArrowRight,
-  Check
+  ArrowRight
 } from 'lucide-react';
 
 export default function Home() {
@@ -136,115 +135,6 @@ export default function Home() {
                 Seamlessly switch between text, images, and voice in a single conversation
               </CardDescription>
             </CardHeader>
-          </Card>
-        </div>
-      </section>
-
-      {/* Pricing Section */}
-      <section id="pricing" className="container px-4 py-24">
-        <div className="text-center space-y-4 mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold">Simple Pricing</h2>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Choose the plan that works best for you
-          </p>
-        </div>
-
-        <div className="grid gap-8 md:grid-cols-3 max-w-5xl mx-auto">
-          <Card>
-            <CardHeader>
-              <CardTitle>Free</CardTitle>
-              <div className="mt-4">
-                <span className="text-4xl font-bold">$0</span>
-                <span className="text-muted-foreground">/month</span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <ul className="space-y-2">
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="text-sm">10 requests/day</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="text-sm">Text chat only</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="text-sm">Basic support</span>
-                </li>
-              </ul>
-              <Link href="/signup" className="block">
-                <Button variant="outline" className="w-full">Get Started</Button>
-              </Link>
-            </CardContent>
-          </Card>
-
-          <Card className="border-primary border-2">
-            <CardHeader>
-              <div className="inline-flex items-center gap-2 px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium mb-2">
-                Popular
-              </div>
-              <CardTitle>Pro</CardTitle>
-              <div className="mt-4">
-                <span className="text-4xl font-bold">$29</span>
-                <span className="text-muted-foreground">/month</span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <ul className="space-y-2">
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="text-sm">Unlimited requests</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="text-sm">All features</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="text-sm">Priority support</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="text-sm">Advanced analytics</span>
-                </li>
-              </ul>
-              <Link href="/signup" className="block">
-                <Button className="w-full">Get Started</Button>
-              </Link>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Enterprise</CardTitle>
-              <div className="mt-4">
-                <span className="text-4xl font-bold">Custom</span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <ul className="space-y-2">
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="text-sm">Everything in Pro</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="text-sm">Custom integrations</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="text-sm">Dedicated support</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="text-sm">SLA guarantee</span>
-                </li>
-              </ul>
-              <Link href="/contact" className="block">
-                <Button variant="outline" className="w-full">Contact Sales</Button>
-              </Link>
-            </CardContent>
           </Card>
         </div>
       </section>

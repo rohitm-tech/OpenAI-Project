@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { authService } from '@/services/auth';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { registerUser, clearError } from '@/store/slices/authSlice';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 
@@ -12,22 +13,28 @@ export default function SignupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const router = useRouter();
+  const dispatch = useAppDispatch();
+  const { isLoading, error, isAuthenticated } = useAppSelector((state) => state.auth);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push('/dashboard');
+    }
+  }, [isAuthenticated, router]);
+
+  useEffect(() => {
+    return () => {
+      dispatch(clearError());
+    };
+  }, [dispatch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      await authService.register(name, email, password);
+    dispatch(clearError());
+    const result = await dispatch(registerUser({ name, email, password }));
+    if (registerUser.fulfilled.match(result)) {
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Signup failed');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -102,8 +109,8 @@ export default function SignupPage() {
                   Must be at least 6 characters
                 </p>
               </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Creating account...' : 'Create Account'}
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? 'Creating account...' : 'Create Account'}
               </Button>
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">

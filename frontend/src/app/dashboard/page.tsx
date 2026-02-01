@@ -1,51 +1,43 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import ChatInterface from '@/components/chat/ChatInterface';
-import { authService } from '@/services/auth';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { logoutUser, checkAuth } from '@/store/slices/authSlice';
 import { LogOut } from 'lucide-react';
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const dispatch = useAppDispatch();
+  const { user, isLoading, isAuthenticated } = useAppSelector((state) => state.auth);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        // Check if token exists first
-        const token = localStorage.getItem('token');
-        if (!token) {
-          router.push('/login');
-          return;
-        }
-        const response = await authService.getCurrentUser();
-        setUser(response.data.user);
-      } catch (error) {
-        // Clear invalid token and redirect
-        localStorage.removeItem('token');
-        router.push('/login');
-      } finally {
-        setLoading(false);
-      }
-    };
+    dispatch(checkAuth());
+  }, [dispatch]);
 
-    checkAuth();
-  }, [router]);
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [isLoading, isAuthenticated, router]);
 
   const handleLogout = async () => {
-    await authService.logout();
-    router.push('/login');
+    await dispatch(logoutUser());
+    router.push('/');
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p>Loading...</p>
       </div>
     );
+  }
+
+  if (!isAuthenticated) {
+    return null;
   }
 
   return (
