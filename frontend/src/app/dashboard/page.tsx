@@ -3,13 +3,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import ChatInterface from '@/components/chat/ChatInterface';
 import ChatHistory from '@/components/chat/ChatHistory';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { checkAuth } from '@/store/slices/authSlice';
 import { conversationService } from '@/services/conversations';
 
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
   const { isLoading, isAuthenticated } = useAppSelector((state) => state.auth);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
@@ -52,8 +53,20 @@ export default function DashboardPage() {
   }, [currentConversationId]);
 
   useEffect(() => {
-    dispatch(checkAuth());
-  }, [dispatch]);
+    // Check for token in URL (from SSO redirect)
+    const token = searchParams.get('token');
+    if (token) {
+      // Save token to localStorage first
+      localStorage.setItem('token', token);
+      // Remove token from URL to clean it up
+      router.replace('/dashboard', { scroll: false });
+      // Check authentication immediately with the saved token
+      dispatch(checkAuth());
+    } else {
+      // No token in URL, check authentication normally
+      dispatch(checkAuth());
+    }
+  }, [dispatch, searchParams, router]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
