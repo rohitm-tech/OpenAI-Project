@@ -31,29 +31,18 @@ export default function Header() {
           </Link>
         </div>
 
-        {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center gap-6">
-          <Link
-            href="/#features"
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Features
-          </Link>
-          <Link
-            href="/#about"
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            About
-          </Link>
-        </nav>
-
         <div className="flex items-center gap-4">
           {isAuthenticated ? (
             <>
               <Link href="/dashboard">
                 <Button variant="ghost" size="sm" className="hidden sm:flex">
+                  Dashboard
+                </Button>
+              </Link>
+              <Link href="/dashboard">
+                <Button variant="ghost" size="sm" className="hidden sm:flex">
                   <User className="h-4 w-4 mr-2" />
-                  {user?.name || 'Dashboard'}
+                  {user?.name || 'User'}
                 </Button>
               </Link>
               <Button variant="outline" size="sm" onClick={handleLogout}>
@@ -90,20 +79,6 @@ export default function Header() {
       {isMenuOpen && (
         <div className="md:hidden border-t">
           <div className="container px-4 py-4 space-y-3">
-            <Link
-              href="/#features"
-              className="block text-sm font-medium"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              Features
-            </Link>
-            <Link
-              href="/#about"
-              className="block text-sm font-medium"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              About
-            </Link>
             {isAuthenticated ? (
               <>
                 <Link

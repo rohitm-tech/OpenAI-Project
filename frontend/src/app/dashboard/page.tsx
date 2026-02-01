@@ -4,9 +4,9 @@ import { useEffect } from 'react';
 import ChatInterface from '@/components/chat/ChatInterface';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { logoutUser, checkAuth } from '@/store/slices/authSlice';
-import { LogOut } from 'lucide-react';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -30,8 +30,11 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Loading...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-muted-foreground">Loading your dashboard...</p>
+        </div>
       </div>
     );
   }
@@ -41,26 +44,15 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <div className="container mx-auto px-4 py-6">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-3xl font-bold">AI Chat Dashboard</h1>
-            <p className="text-muted-foreground">Interact with AI in real-time</p>
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-muted/20">
+      {/* Main Content */}
+      <div className="flex-1 container mx-auto px-4 py-6 max-w-7xl">
+        {/* Chat Interface */}
+        <Card className="border-2 shadow-xl overflow-hidden">
+          <div className="h-[calc(100vh-200px)] min-h-[600px]">
+            <ChatInterface />
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-medium">{user?.name}</p>
-              <p className="text-xs text-muted-foreground">{user?.email}</p>
-            </div>
-            <Button variant="outline" size="icon" onClick={handleLogout} title="Logout">
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-        <div className="border rounded-lg h-[calc(100vh-200px)]">
-          <ChatInterface />
-        </div>
+        </Card>
       </div>
     </div>
   );

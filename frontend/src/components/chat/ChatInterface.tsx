@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Send, Image, Mic, Loader2, Square } from 'lucide-react';
+import { Send, Image, Mic, Loader2, Square, Sparkles } from 'lucide-react';
 import { aiService, TextRequest } from '@/services/ai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -325,12 +325,21 @@ export default function ChatInterface({
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
-          <div className="text-center text-muted-foreground mt-8">
-            <p className="text-lg font-semibold mb-2">Start a conversation</p>
-            <p className="text-sm">
-              Ask me anything, and I'll help you with text, images, or voice
-              interactions.
+          <div className="text-center text-muted-foreground mt-12 md:mt-16">
+            <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 mb-4">
+              <Sparkles className="h-8 w-8 text-primary" />
+            </div>
+            <p className="text-xl md:text-2xl font-bold mb-2 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+              Start a conversation
             </p>
+            <p className="text-sm md:text-base max-w-md mx-auto">
+              Ask me anything, and I'll help you with text, images, or voice interactions.
+            </p>
+            <div className="flex flex-wrap justify-center gap-3 mt-6 text-xs">
+              <span className="px-3 py-1 rounded-full bg-muted border">💬 Text Chat</span>
+              <span className="px-3 py-1 rounded-full bg-muted border">🖼️ Image Analysis</span>
+              <span className="px-3 py-1 rounded-full bg-muted border">🎤 Voice Input</span>
+            </div>
           </div>
         )}
 
@@ -339,40 +348,45 @@ export default function ChatInterface({
             key={index}
             className={`flex ${
               message.role === 'user' ? 'justify-end' : 'justify-start'
-            }`}
+            } animate-in fade-in slide-in-from-bottom-4 duration-300`}
           >
             <Card
-              className={`max-w-[80%] ${
+              className={`max-w-[85%] md:max-w-[75%] ${
                 message.role === 'user'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted'
+                  ? 'bg-gradient-to-br from-primary to-primary/90 text-primary-foreground shadow-lg border-primary/20'
+                  : 'bg-card border-2 shadow-md hover:shadow-lg transition-shadow'
               }`}
             >
-              <CardContent className="p-4">
+              <CardContent className="p-4 md:p-5">
                 {message.isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Thinking...</span>
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span className="text-sm">Thinking...</span>
                   </div>
                 ) : message.role === 'assistant' ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-p:leading-relaxed prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {message.content}
                     </ReactMarkdown>
                   </div>
                 ) : message.type === 'image' ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {selectedImage && message.content.includes('[Image uploaded') && (
-                      <img
-                        src={selectedImage}
-                        alt="Uploaded"
-                        className="max-w-full h-auto rounded-md"
-                      />
+                      <div className="relative group">
+                        <img
+                          src={selectedImage}
+                          alt="Uploaded"
+                          className="max-w-full h-auto rounded-lg shadow-lg border-2 border-primary/20 transition-transform group-hover:scale-[1.02]"
+                        />
+                        <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-sm">
+                          Image
+                        </div>
+                      </div>
                     )}
-                    <p className="text-sm opacity-80">{message.content}</p>
+                    <p className="text-sm opacity-90 font-medium">{message.content}</p>
                   </div>
                 ) : (
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
                 )}
               </CardContent>
             </Card>
@@ -381,34 +395,49 @@ export default function ChatInterface({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="border-t p-4">
+      <div className="border-t bg-muted/30 backdrop-blur-sm p-4">
         {selectedImage && (
-          <div className="mb-2 relative inline-block">
-            <img
-              src={selectedImage}
-              alt="Selected"
-              className="max-w-[200px] h-auto rounded-md border"
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-1 right-1 h-6 w-6"
-              onClick={() => setSelectedImage(null)}
-            >
-              ×
-            </Button>
+          <div className="mb-3 relative inline-block group">
+            <div className="relative">
+              <img
+                src={selectedImage}
+                alt="Selected"
+                className="max-w-[200px] h-auto rounded-lg border-2 border-primary/30 shadow-md transition-transform group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-black/40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setSelectedImage(null)}
+                >
+                  ×
+                </Button>
+              </div>
+            </div>
+            <div className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full shadow-lg">
+              Ready
+            </div>
           </div>
         )}
-        <div className="flex gap-2">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Type your message..."
-            className="flex-1 min-h-[60px] max-h-[200px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-            disabled={isLoading}
-          />
+        <div className="flex gap-3 items-end">
+          <div className="flex-1 relative">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Type your message or ask about the image..."
+              className="w-full min-h-[60px] max-h-[200px] p-4 border-2 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary/50 bg-background shadow-sm transition-all"
+              disabled={isLoading}
+            />
+            {isRecording && (
+              <div className="absolute bottom-2 left-4 flex items-center gap-2 text-destructive text-sm font-medium">
+                <div className="h-2 w-2 bg-destructive rounded-full animate-pulse" />
+                Recording...
+              </div>
+            )}
+          </div>
           <input
             ref={fileInputRef}
             type="file"
@@ -421,20 +450,22 @@ export default function ChatInterface({
               onClick={handleSend}
               disabled={(!input.trim() && !selectedImage) || isLoading}
               size="icon"
+              className="h-11 w-11 shadow-lg hover:shadow-xl transition-all hover:scale-105"
             >
               {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                <Send className="h-4 w-4" />
+                <Send className="h-5 w-5" />
               )}
             </Button>
-            <div className="flex gap-1">
+            <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="icon"
                 title="Upload Image"
                 onClick={handleImageUpload}
                 disabled={isLoading}
+                className="h-10 w-10 hover:bg-purple-50 dark:hover:bg-purple-950/20 hover:border-purple-300 transition-all"
               >
                 <Image className="h-4 w-4" />
               </Button>
@@ -444,6 +475,11 @@ export default function ChatInterface({
                 title={isRecording ? 'Stop Recording' : 'Voice Input'}
                 onClick={handleVoiceInput}
                 disabled={isLoading}
+                className={`h-10 w-10 transition-all ${
+                  isRecording 
+                    ? 'animate-pulse shadow-lg shadow-destructive/50' 
+                    : 'hover:bg-green-50 dark:hover:bg-green-950/20 hover:border-green-300'
+                }`}
               >
                 {isRecording ? (
                   <Square className="h-4 w-4" />
