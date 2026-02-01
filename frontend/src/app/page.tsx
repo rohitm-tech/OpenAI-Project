@@ -169,7 +169,7 @@ export default function Home() {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="container px-4 py-24 bg-muted/50">
+      <section id="features" className="container px-4 py-24">
         <motion.div
           className="text-center space-y-4 mb-16"
           initial={{ opacity: 0, y: 20 }}
@@ -177,121 +177,141 @@ export default function Home() {
           viewport={{ once: true }}
           transition={{ duration: 0.6 }}
         >
-          <h2 className="text-3xl md:text-4xl font-bold">Powerful Features</h2>
+          <motion.span 
+            className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4"
+            initial={{ opacity: 0, scale: 0.9 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+          >
+            Features
+          </motion.span>
+          <h2 className="text-3xl md:text-5xl font-bold">Powerful Features</h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Everything you need to interact with AI in multiple ways
           </p>
         </motion.div>
 
         <motion.div
-          className="grid gap-8 md:grid-cols-2 lg:grid-cols-3"
+          className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"
           variants={containerVariants}
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, margin: "-100px" }}
         >
+          {/* Card 1 - Text Chat */}
           <motion.div variants={cardVariants}>
-            <Card className="h-full transition-all duration-300 hover:shadow-lg hover:scale-105">
-              <CardHeader>
+            <Card className="group h-full border-0 bg-gradient-to-br from-blue-500/10 via-background to-background shadow-lg hover:shadow-xl transition-all duration-500 overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <CardHeader className="relative z-10 p-6">
                 <motion.div
-                  className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4"
-                  whileHover={{ rotate: 360, scale: 1.1 }}
-                  transition={{ duration: 0.5 }}
+                  className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-5 shadow-lg shadow-blue-500/25"
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <MessageSquare className="h-6 w-6 text-primary" />
+                  <MessageSquare className="h-7 w-7 text-white" />
                 </motion.div>
-                <CardTitle>Real-time Text Chat</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-xl mb-2">Real-time Text Chat</CardTitle>
+                <CardDescription className="text-base leading-relaxed">
                   Chat with AI using the latest GPT models with streaming responses for instant feedback
                 </CardDescription>
               </CardHeader>
             </Card>
           </motion.div>
 
+          {/* Card 2 - Image */}
           <motion.div variants={cardVariants}>
-            <Card className="h-full transition-all duration-300 hover:shadow-lg hover:scale-105">
-              <CardHeader>
+            <Card className="group h-full border-0 bg-gradient-to-br from-purple-500/10 via-background to-background shadow-lg hover:shadow-xl transition-all duration-500 overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <CardHeader className="relative z-10 p-6">
                 <motion.div
-                  className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4"
-                  whileHover={{ rotate: 360, scale: 1.1 }}
-                  transition={{ duration: 0.5 }}
+                  className="h-14 w-14 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center mb-5 shadow-lg shadow-purple-500/25"
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <Image className="h-6 w-6 text-primary" />
+                  <Image className="h-7 w-7 text-white" />
                 </motion.div>
-                <CardTitle>Image Analysis & Generation</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-xl mb-2">Image Analysis & Generation</CardTitle>
+                <CardDescription className="text-base leading-relaxed">
                   Upload images for analysis or generate stunning images from text descriptions
                 </CardDescription>
               </CardHeader>
             </Card>
           </motion.div>
 
+          {/* Card 3 - Voice */}
           <motion.div variants={cardVariants}>
-            <Card className="h-full transition-all duration-300 hover:shadow-lg hover:scale-105">
-              <CardHeader>
+            <Card className="group h-full border-0 bg-gradient-to-br from-emerald-500/10 via-background to-background shadow-lg hover:shadow-xl transition-all duration-500 overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <CardHeader className="relative z-10 p-6">
                 <motion.div
-                  className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4"
-                  whileHover={{ rotate: 360, scale: 1.1 }}
-                  transition={{ duration: 0.5 }}
+                  className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mb-5 shadow-lg shadow-emerald-500/25"
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <Mic className="h-6 w-6 text-primary" />
+                  <Mic className="h-7 w-7 text-white" />
                 </motion.div>
-                <CardTitle>Voice Interactions</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-xl mb-2">Voice Interactions</CardTitle>
+                <CardDescription className="text-base leading-relaxed">
                   Convert text to speech or transcribe audio to text with high accuracy
                 </CardDescription>
               </CardHeader>
             </Card>
           </motion.div>
 
+          {/* Card 4 - Speed */}
           <motion.div variants={cardVariants}>
-            <Card className="h-full transition-all duration-300 hover:shadow-lg hover:scale-105">
-              <CardHeader>
+            <Card className="group h-full border-0 bg-gradient-to-br from-amber-500/10 via-background to-background shadow-lg hover:shadow-xl transition-all duration-500 overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <CardHeader className="relative z-10 p-6">
                 <motion.div
-                  className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4"
-                  whileHover={{ rotate: 360, scale: 1.1 }}
-                  transition={{ duration: 0.5 }}
+                  className="h-14 w-14 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center mb-5 shadow-lg shadow-amber-500/25"
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <Zap className="h-6 w-6 text-primary" />
+                  <Zap className="h-7 w-7 text-white" />
                 </motion.div>
-                <CardTitle>Lightning Fast</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-xl mb-2">Lightning Fast</CardTitle>
+                <CardDescription className="text-base leading-relaxed">
                   Optimized for speed with real-time streaming and low latency responses
                 </CardDescription>
               </CardHeader>
             </Card>
           </motion.div>
 
+          {/* Card 5 - Security */}
           <motion.div variants={cardVariants}>
-            <Card className="h-full transition-all duration-300 hover:shadow-lg hover:scale-105">
-              <CardHeader>
+            <Card className="group h-full border-0 bg-gradient-to-br from-rose-500/10 via-background to-background shadow-lg hover:shadow-xl transition-all duration-500 overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <CardHeader className="relative z-10 p-6">
                 <motion.div
-                  className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4"
-                  whileHover={{ rotate: 360, scale: 1.1 }}
-                  transition={{ duration: 0.5 }}
+                  className="h-14 w-14 rounded-2xl bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center mb-5 shadow-lg shadow-rose-500/25"
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <Shield className="h-6 w-6 text-primary" />
+                  <Shield className="h-7 w-7 text-white" />
                 </motion.div>
-                <CardTitle>Secure & Private</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-xl mb-2">Secure & Private</CardTitle>
+                <CardDescription className="text-base leading-relaxed">
                   Your data is encrypted and secure. We never store your conversations without permission
                 </CardDescription>
               </CardHeader>
             </Card>
           </motion.div>
 
+          {/* Card 6 - Multi-Modal */}
           <motion.div variants={cardVariants}>
-            <Card className="h-full transition-all duration-300 hover:shadow-lg hover:scale-105">
-              <CardHeader>
+            <Card className="group h-full border-0 bg-gradient-to-br from-cyan-500/10 via-background to-background shadow-lg hover:shadow-xl transition-all duration-500 overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <CardHeader className="relative z-10 p-6">
                 <motion.div
-                  className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4"
-                  whileHover={{ rotate: 360, scale: 1.1 }}
-                  transition={{ duration: 0.5 }}
+                  className="h-14 w-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center mb-5 shadow-lg shadow-cyan-500/25"
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <Globe className="h-6 w-6 text-primary" />
+                  <Globe className="h-7 w-7 text-white" />
                 </motion.div>
-                <CardTitle>Multi-Modal Support</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-xl mb-2">Multi-Modal Support</CardTitle>
+                <CardDescription className="text-base leading-relaxed">
                   Seamlessly switch between text, images, and voice in a single conversation
                 </CardDescription>
               </CardHeader>

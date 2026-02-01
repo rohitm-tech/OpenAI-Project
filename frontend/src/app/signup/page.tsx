@@ -8,7 +8,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { registerUser, clearError } from '@/store/slices/authSlice';
 import { authService } from '@/services/auth';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 
 export default function SignupPage() {
   const [name, setName] = useState('');
@@ -44,16 +44,22 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-muted/50">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-background to-primary/5">
       <div className="w-full max-w-md space-y-6">
-        <Link href="/" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to home
+        {/* Logo */}
+        <Link href="/" className="flex items-center justify-center gap-2 group">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg group-hover:shadow-primary/25 transition-shadow">
+            <Sparkles className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <span className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+            MultimodAI
+          </span>
         </Link>
-        <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl">Create an account</CardTitle>
-            <CardDescription>
+
+        <Card className="border-0 shadow-xl shadow-black/5">
+          <CardHeader className="space-y-1 pb-4">
+            <CardTitle className="text-2xl text-center">Create an account</CardTitle>
+            <CardDescription className="text-center">
               Enter your information to get started
             </CardDescription>
           </CardHeader>
