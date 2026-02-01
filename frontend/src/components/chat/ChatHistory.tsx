@@ -2,6 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from '@/components/ui/dialog';
 import { 
   MessageSquare, 
   Plus, 
@@ -11,7 +20,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
-  X
+  X,
+  AlertTriangle
 } from 'lucide-react';
 import { conversationService, Conversation } from '@/services/conversations';
 import { formatDistanceToNow } from 'date-fns';
@@ -35,6 +45,8 @@ export default function ChatHistory({
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
 
   useEffect(() => {
     loadConversations();
@@ -54,22 +66,35 @@ export default function ChatHistory({
     }
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteClick = (conv: Conversation, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Delete this conversation?')) return;
+    setConversationToDelete(conv);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!conversationToDelete) return;
 
     try {
-      setDeletingId(id);
-      await conversationService.delete(id);
-      setConversations((prev) => prev.filter((c) => c._id !== id));
-      if (currentConversationId === id) {
+      setDeletingId(conversationToDelete._id);
+      await conversationService.delete(conversationToDelete._id);
+      setConversations((prev) => prev.filter((c) => c._id !== conversationToDelete._id));
+      if (currentConversationId === conversationToDelete._id) {
         onNewConversation();
       }
+      setDeleteDialogOpen(false);
+      setConversationToDelete(null);
     } catch (error) {
       console.error('Error deleting conversation:', error);
+      alert('Failed to delete conversation. Please try again.');
     } finally {
       setDeletingId(null);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setConversationToDelete(null);
   };
 
   const filteredConversations = conversations.filter((conv) =>
@@ -234,7 +259,7 @@ export default function ChatHistory({
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                        onClick={(e) => handleDelete(conv._id, e)}
+                        onClick={(e) => handleDeleteClick(conv, e)}
                         disabled={deletingId === conv._id}
                       >
                         {deletingId === conv._id ? (
@@ -258,6 +283,50 @@ export default function ChatHistory({
           {conversations.length} conversation{conversations.length !== 1 ? 's' : ''}
         </p>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogClose onClose={handleDeleteCancel} />
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+              </div>
+              <DialogTitle className="text-left">Delete Conversation</DialogTitle>
+            </div>
+            <DialogDescription className="text-left pt-2">
+              Are you sure you want to delete <span className="font-semibold text-foreground">"{conversationToDelete?.title}"</span>? This action cannot be undone and all messages in this conversation will be permanently deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={handleDeleteCancel}
+              disabled={deletingId !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={deletingId !== null}
+            >
+              {deletingId === conversationToDelete?._id ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

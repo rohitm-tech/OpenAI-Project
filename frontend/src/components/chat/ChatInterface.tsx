@@ -36,6 +36,7 @@ export default function ChatInterface({
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
@@ -53,6 +54,7 @@ export default function ChatInterface({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recognitionRef = useRef<any>(null);
+  const realtimeMessagesRef = useRef<{ role: 'user' | 'assistant'; content: string; type: string }[]>([]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -120,7 +122,7 @@ export default function ChatInterface({
   }, [conversationId, onConversationUpdated]);
 
   const handleSend = async () => {
-    if ((!input.trim() && !selectedImage) || isLoading) return;
+    if ((!input.trim() && !selectedImage) || isLoading || isCreatingConversation) return;
 
     // Check if we have a selected image to analyze
     if (selectedImage) {
@@ -138,14 +140,19 @@ export default function ChatInterface({
     let currentConversationId = conversationId;
     if (!currentConversationId) {
       try {
+        setIsCreatingConversation(true);
         const response = await conversationService.create();
         if (response.success) {
           currentConversationId = response.data._id;
           onConversationIdChange?.(currentConversationId);
-          onNewConversation?.();
+          // Don't call onNewConversation here - it would create another empty conversation
         }
       } catch (error) {
         console.error('Error creating conversation:', error);
+        setIsCreatingConversation(false);
+        return; // Don't proceed if conversation creation failed
+      } finally {
+        setIsCreatingConversation(false);
       }
     }
 
@@ -258,20 +265,24 @@ export default function ChatInterface({
   };
 
   const handleGenerateImage = async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || isCreatingConversation) return;
 
     // Create a new conversation if one doesn't exist
     let currentConversationId = conversationId;
     if (!currentConversationId) {
       try {
+        setIsCreatingConversation(true);
         const response = await conversationService.create();
         if (response.success) {
           currentConversationId = response.data._id;
           onConversationIdChange?.(currentConversationId);
-          onNewConversation?.();
         }
       } catch (error) {
         console.error('Error creating conversation:', error);
+        setIsCreatingConversation(false);
+        return;
+      } finally {
+        setIsCreatingConversation(false);
       }
     }
 
@@ -384,20 +395,24 @@ export default function ChatInterface({
   };
 
   const handleImageAnalysis = async () => {
-    if (!selectedImage) return;
+    if (!selectedImage || isCreatingConversation) return;
 
     // Create a new conversation if one doesn't exist
     let currentConversationId = conversationId;
     if (!currentConversationId) {
       try {
+        setIsCreatingConversation(true);
         const response = await conversationService.create();
         if (response.success) {
           currentConversationId = response.data._id;
           onConversationIdChange?.(currentConversationId);
-          onNewConversation?.();
         }
       } catch (error) {
         console.error('Error creating conversation:', error);
+        setIsCreatingConversation(false);
+        return;
+      } finally {
+        setIsCreatingConversation(false);
       }
     }
 
@@ -638,6 +653,28 @@ export default function ChatInterface({
     let keepAliveInterval: NodeJS.Timeout | null = null;
     
     try {
+      // Create a new conversation if one doesn't exist
+      let currentConversationId = conversationId;
+      if (!currentConversationId) {
+        try {
+          setIsCreatingConversation(true);
+          const response = await conversationService.create();
+          if (response.success) {
+            currentConversationId = response.data._id;
+            onConversationIdChange?.(currentConversationId);
+          }
+        } catch (error) {
+          console.error('Error creating conversation:', error);
+          setIsCreatingConversation(false);
+          throw error; // Re-throw to prevent connection if conversation creation fails
+        } finally {
+          setIsCreatingConversation(false);
+        }
+      }
+
+      // Clear previous realtime messages
+      realtimeMessagesRef.current = [];
+
       // Get client secret from backend
       const response = await aiService.createRealtimeClientSecret({
         voice: 'alloy',
@@ -800,7 +837,27 @@ export default function ChatInterface({
           }
 
           // Handle different event types
-          if (data.type === 'response.output_text.delta') {
+          if (data.type === 'input_audio_buffer.transcript.completed') {
+            // User speech transcribed
+            const userText = data.transcript || '';
+            if (userText.trim()) {
+              // Add user message to UI
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: 'user',
+                  content: userText,
+                  type: 'text',
+                },
+              ]);
+              // Track for saving
+              realtimeMessagesRef.current.push({
+                role: 'user',
+                content: userText,
+                type: 'text',
+              });
+            }
+          } else if (data.type === 'response.output_text.delta') {
             // Text output (optional, for display)
             const text = data.delta;
             if (text) {
@@ -822,19 +879,75 @@ export default function ChatInterface({
                 return newMessages;
               });
             }
+          } else if (data.type === 'response.output_text.done') {
+            // Assistant response complete
+            const assistantText = data.text || '';
+            if (assistantText.trim()) {
+              // Update the last assistant message if it exists, or create new one
+              setMessages((prev) => {
+                const newMessages = [...prev];
+                const lastMessage = newMessages[newMessages.length - 1];
+                if (lastMessage && lastMessage.role === 'assistant') {
+                  newMessages[newMessages.length - 1] = {
+                    ...lastMessage,
+                    content: assistantText,
+                  };
+                } else {
+                  newMessages.push({
+                    role: 'assistant',
+                    content: assistantText,
+                    type: 'text',
+                  });
+                }
+                return newMessages;
+              });
+              // Track for saving
+              realtimeMessagesRef.current.push({
+                role: 'assistant',
+                content: assistantText,
+                type: 'text',
+              });
+              // Save messages to conversation
+              const convId = conversationId || currentConversationId;
+              if (convId && realtimeMessagesRef.current.length >= 2) {
+                // Save the last user-assistant pair
+                const messagesToSave = realtimeMessagesRef.current.slice(-2);
+                saveMessages(messagesToSave, convId).catch((error) => {
+                  console.error('Error saving realtime messages:', error);
+                });
+              }
+            }
           } else if (data.type === 'response.output_audio.delta') {
             // Audio is handled by WebRTC
           } else if (data.type === 'conversation.item.added') {
-            // New conversation item
-            if (data.item?.type === 'message' && data.item.role === 'assistant') {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  role: 'assistant',
-                  content: data.item.content?.[0]?.text || '',
+            // New conversation item (backup handler)
+            if (data.item?.type === 'message') {
+              const itemText = data.item.content?.[0]?.text || '';
+              if (itemText.trim()) {
+                const role = data.item.role === 'user' ? 'user' : 'assistant';
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    role,
+                    content: itemText,
+                    type: 'text',
+                  },
+                ]);
+                // Track for saving
+                realtimeMessagesRef.current.push({
+                  role,
+                  content: itemText,
                   type: 'text',
-                },
-              ]);
+                });
+                // Save if we have a pair
+                const convId = conversationId || currentConversationId;
+                if (convId && realtimeMessagesRef.current.length >= 2) {
+                  const messagesToSave = realtimeMessagesRef.current.slice(-2);
+                  saveMessages(messagesToSave, convId).catch((error) => {
+                    console.error('Error saving realtime messages:', error);
+                  });
+                }
+              }
             }
           }
         } catch (error) {
@@ -890,6 +1003,17 @@ export default function ChatInterface({
 
   const disconnectRealtime = async () => {
     try {
+      // Save any remaining realtime messages before disconnecting
+      if (conversationId && realtimeMessagesRef.current.length > 0) {
+        try {
+          await saveMessages(realtimeMessagesRef.current, conversationId);
+          realtimeMessagesRef.current = [];
+          onConversationUpdated?.();
+        } catch (error) {
+          console.error('Error saving final realtime messages:', error);
+        }
+      }
+
       // Clear keepalive interval
       if (realtimeConnectionRef.current && (realtimeConnectionRef.current as any).keepAliveInterval) {
         clearInterval((realtimeConnectionRef.current as any).keepAliveInterval);
@@ -1239,7 +1363,7 @@ export default function ChatInterface({
               {/* Send button inside input box */}
               <Button
                 onClick={handleSend}
-                disabled={(!input.trim() && !selectedImage) || isLoading || isRealtimeMode}
+                disabled={(!input.trim() && !selectedImage) || isLoading || isRealtimeMode || isCreatingConversation}
                 size="icon"
                 className="absolute top-2 right-2 h-[28px] w-[28px] rounded-lg"
               >
