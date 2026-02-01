@@ -227,7 +227,7 @@ export default function ChatHistory({
                           {conv.title}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {conv.messages.length} messages
+                          {conv.messageCount || 0} messages
                         </p>
                       </div>
                       <Button

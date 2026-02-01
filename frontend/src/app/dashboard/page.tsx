@@ -16,17 +16,28 @@ export default function DashboardPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  useEffect(() => {
-    dispatch(checkAuth());
-  }, [dispatch]);
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isLoading, isAuthenticated, router]);
-
   const handleNewConversation = useCallback(async () => {
+    // If there's a current conversation, check if it has messages
+    if (currentConversationId) {
+      try {
+        const response = await conversationService.getById(currentConversationId);
+        if (response.success) {
+          // If the conversation has no messages, just clear it instead of creating a new one
+          const messageCount = response.data.messages?.length || response.data.messageCount || 0;
+          if (messageCount === 0) {
+            setCurrentConversationId(null);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error checking conversation:', error);
+        // If we can't check, just clear it
+        setCurrentConversationId(null);
+        return;
+      }
+    }
+
+    // If no current conversation or current conversation has messages, create a new one
     try {
       const response = await conversationService.create();
       if (response.success) {
@@ -38,7 +49,17 @@ export default function DashboardPage() {
       // Still allow new conversation without saving
       setCurrentConversationId(null);
     }
-  }, []);
+  }, [currentConversationId]);
+
+  useEffect(() => {
+    dispatch(checkAuth());
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [isLoading, isAuthenticated, router]);
 
   const handleSelectConversation = useCallback((id: string) => {
     setCurrentConversationId(id);
@@ -81,6 +102,7 @@ export default function DashboardPage() {
           conversationId={currentConversationId || undefined}
           onNewConversation={handleNewConversation}
           onConversationUpdated={handleConversationUpdated}
+          onConversationIdChange={(id) => setCurrentConversationId(id)}
         />
       </div>
     </div>

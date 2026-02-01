@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { Conversation } from '../models/Conversation';
+import { Message } from '../models/Message';
 
 export const createConversation = async (req: AuthRequest, res: Response) => {
   try {
@@ -33,12 +34,25 @@ export const getConversations = async (req: AuthRequest, res: Response) => {
       userId: req.userId,
     })
       .sort({ updatedAt: -1 })
-      .select('title createdAt updatedAt model messages')
+      .select('title createdAt updatedAt model')
       .limit(50);
+
+    // Get message counts for each conversation
+    const conversationsWithCounts = await Promise.all(
+      conversations.map(async (conv) => {
+        const messageCount = await Message.countDocuments({
+          conversationId: conv._id,
+        });
+        return {
+          ...conv.toObject(),
+          messageCount,
+        };
+      })
+    );
 
     res.json({
       success: true,
-      data: conversations,
+      data: conversationsWithCounts,
     });
   } catch (error: any) {
     res.status(400).json({
@@ -65,9 +79,26 @@ export const getConversation = async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    // Get all messages for this conversation
+    const messages = await Message.find({
+      conversationId: id,
+    })
+      .sort({ createdAt: 1 })
+      .select('role content type metadata createdAt')
+      .lean();
+
     res.json({
       success: true,
-      data: conversation,
+      data: {
+        ...conversation.toObject(),
+        messages: messages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+          type: msg.type,
+          metadata: msg.metadata,
+          timestamp: msg.createdAt,
+        })),
+      },
     });
   } catch (error: any) {
     res.status(400).json({
@@ -125,6 +156,9 @@ export const deleteConversation = async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    // Delete all messages associated with this conversation
+    await Message.deleteMany({ conversationId: id });
+
     res.json({
       success: true,
       message: 'Conversation deleted successfully',
@@ -155,26 +189,39 @@ export const addMessage = async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const message = {
+    // Create message in Message collection
+    const message = new Message({
+      conversationId: id,
       role,
       content,
       type: type || 'text',
       metadata,
-      timestamp: new Date(),
-    };
+    });
 
-    conversation.messages.push(message);
+    await message.save();
 
     // Auto-generate title from first user message if still default
     if (conversation.title === 'New Conversation' && role === 'user') {
       conversation.title = content.slice(0, 50) + (content.length > 50 ? '...' : '');
+      await conversation.save();
     }
 
+    // Update conversation's updatedAt timestamp
+    conversation.updatedAt = new Date();
     await conversation.save();
 
     res.json({
       success: true,
-      data: conversation,
+      data: {
+        ...conversation.toObject(),
+        messages: [{
+          role: message.role,
+          content: message.content,
+          type: message.type,
+          metadata: message.metadata,
+          timestamp: message.createdAt,
+        }],
+      },
     });
   } catch (error: any) {
     res.status(400).json({
@@ -202,29 +249,42 @@ export const addMessages = async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    // Create messages in Message collection
     const newMessages = messages.map((msg: any) => ({
+      conversationId: id,
       role: msg.role,
       content: msg.content,
       type: msg.type || 'text',
       metadata: msg.metadata,
-      timestamp: new Date(),
     }));
 
-    conversation.messages.push(...newMessages);
+    const savedMessages = await Message.insertMany(newMessages);
 
     // Auto-generate title from first user message if still default
     if (conversation.title === 'New Conversation') {
-      const firstUserMsg = newMessages.find((m: any) => m.role === 'user');
+      const firstUserMsg = messages.find((m: any) => m.role === 'user');
       if (firstUserMsg) {
         conversation.title = firstUserMsg.content.slice(0, 50) + (firstUserMsg.content.length > 50 ? '...' : '');
+        await conversation.save();
       }
     }
 
+    // Update conversation's updatedAt timestamp
+    conversation.updatedAt = new Date();
     await conversation.save();
 
     res.json({
       success: true,
-      data: conversation,
+      data: {
+        ...conversation.toObject(),
+        messages: savedMessages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+          type: msg.type,
+          metadata: msg.metadata,
+          timestamp: msg.createdAt,
+        })),
+      },
     });
   } catch (error: any) {
     res.status(400).json({

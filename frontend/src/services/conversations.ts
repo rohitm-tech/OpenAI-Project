@@ -16,7 +16,8 @@ export interface Conversation {
   _id: string;
   userId: string;
   title: string;
-  messages: Message[];
+  messages?: Message[];
+  messageCount?: number;
   model: string;
   createdAt: string;
   updatedAt: string;

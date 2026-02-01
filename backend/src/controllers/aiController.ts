@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { OpenAIService } from '../services/openaiService';
-import { Conversation } from '../models/Conversation';
 import { z } from 'zod';
 
 const textRequestSchema = z.object({
@@ -30,30 +29,8 @@ export const generateText = async (req: AuthRequest, res: Response) => {
       model
     );
 
-    // Save to conversation if conversationId provided
-    if (conversationId && req.userId) {
-      await Conversation.findByIdAndUpdate(conversationId, {
-        $push: {
-          messages: {
-            role: 'user',
-            content: typeof input === 'string' ? input : JSON.stringify(input),
-            type: 'text',
-            timestamp: new Date(),
-          },
-        },
-      });
-
-      await Conversation.findByIdAndUpdate(conversationId, {
-        $push: {
-          messages: {
-            role: 'assistant',
-            content: response.text,
-            type: 'text',
-            timestamp: new Date(),
-          },
-        },
-      });
-    }
+    // Messages are saved by the frontend via conversationController
+    // No need to save here to avoid duplicates
 
     res.json({
       success: true,
@@ -100,35 +77,8 @@ export const generateTextStream = async (req: AuthRequest, res: Response) => {
             `data: ${JSON.stringify({ type: 'done', response: fullResponse })}\n\n`
           );
 
-          // Save to conversation
-          if (conversationId && req.userId) {
-            try {
-              await Conversation.findByIdAndUpdate(conversationId, {
-                $push: {
-                  messages: {
-                    role: 'user',
-                    content:
-                      typeof input === 'string' ? input : JSON.stringify(input),
-                    type: 'text',
-                    timestamp: new Date(),
-                  },
-                },
-              });
-
-              await Conversation.findByIdAndUpdate(conversationId, {
-                $push: {
-                  messages: {
-                    role: 'assistant',
-                    content: fullResponse,
-                    type: 'text',
-                    timestamp: new Date(),
-                  },
-                },
-              });
-            } catch (dbError) {
-              console.error('Error saving conversation:', dbError);
-            }
-          }
+          // Messages are saved by the frontend via conversationController
+          // No need to save here to avoid duplicates
 
           res.end();
           return;

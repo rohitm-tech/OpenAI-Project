@@ -23,12 +23,14 @@ interface ChatInterfaceProps {
   conversationId?: string;
   onNewConversation?: () => void;
   onConversationUpdated?: () => void;
+  onConversationIdChange?: (id: string) => void;
 }
 
 export default function ChatInterface({
   conversationId,
   onNewConversation,
   onConversationUpdated,
+  onConversationIdChange,
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -105,11 +107,12 @@ export default function ChatInterface({
     }
   };
 
-  const saveMessages = useCallback(async (newMessages: { role: string; content: string; type: string; metadata?: any }[]) => {
-    if (!conversationId) return;
+  const saveMessages = useCallback(async (newMessages: { role: string; content: string; type: string; metadata?: any }[], targetConversationId?: string) => {
+    const idToUse = targetConversationId || conversationId;
+    if (!idToUse) return;
     
     try {
-      await conversationService.addMessages(conversationId, newMessages as any);
+      await conversationService.addMessages(idToUse, newMessages as any);
       onConversationUpdated?.();
     } catch (error) {
       console.error('Error saving messages:', error);
@@ -129,6 +132,21 @@ export default function ChatInterface({
     if (generateImageMode) {
       await handleGenerateImage();
       return;
+    }
+
+    // Create a new conversation if one doesn't exist
+    let currentConversationId = conversationId;
+    if (!currentConversationId) {
+      try {
+        const response = await conversationService.create();
+        if (response.success) {
+          currentConversationId = response.data._id;
+          onConversationIdChange?.(currentConversationId);
+          onNewConversation?.();
+        }
+      } catch (error) {
+        console.error('Error creating conversation:', error);
+      }
     }
 
     const userMessage: Message = {
@@ -155,7 +173,7 @@ export default function ChatInterface({
     try {
       const request: TextRequest = {
         input: prompt,
-        conversationId,
+        conversationId: currentConversationId,
       };
 
       await aiService.generateTextStream(
@@ -164,9 +182,13 @@ export default function ChatInterface({
           setMessages((prev) => {
             const newMessages = [...prev];
             const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage.role === 'assistant') {
-              lastMessage.content += chunk;
-              lastMessage.isLoading = false;
+            if (lastMessage && lastMessage.role === 'assistant') {
+              // Create a new object instead of mutating
+              newMessages[newMessages.length - 1] = {
+                ...lastMessage,
+                content: lastMessage.content + chunk,
+                isLoading: false,
+              };
             }
             return newMessages;
           });
@@ -176,10 +198,12 @@ export default function ChatInterface({
           setIsLoading(false);
           
           // Save messages to conversation
-          await saveMessages([
-            { role: 'user', content: prompt, type: 'text' },
-            { role: 'assistant', content: fullText, type: 'text' },
-          ]);
+          if (currentConversationId) {
+            await saveMessages([
+              { role: 'user', content: prompt, type: 'text' },
+              { role: 'assistant', content: fullText, type: 'text' },
+            ], currentConversationId);
+          }
           
           // Automatically speak the response if audio is enabled
           if (audioEnabled && fullText && fullText.trim()) {
@@ -196,8 +220,13 @@ export default function ChatInterface({
           setMessages((prev) => {
             const newMessages = [...prev];
             const lastMessage = newMessages[newMessages.length - 1];
-            lastMessage.content = `Error: ${error.message}`;
-            lastMessage.isLoading = false;
+            if (lastMessage) {
+              newMessages[newMessages.length - 1] = {
+                ...lastMessage,
+                content: `Error: ${error.message}`,
+                isLoading: false,
+              };
+            }
             return newMessages;
           });
         }
@@ -209,8 +238,13 @@ export default function ChatInterface({
       setMessages((prev) => {
         const newMessages = [...prev];
         const lastMessage = newMessages[newMessages.length - 1];
-        lastMessage.content = `Error: ${error.message}`;
-        lastMessage.isLoading = false;
+        if (lastMessage) {
+          newMessages[newMessages.length - 1] = {
+            ...lastMessage,
+            content: `Error: ${error.message}`,
+            isLoading: false,
+          };
+        }
         return newMessages;
       });
     }
@@ -225,6 +259,21 @@ export default function ChatInterface({
 
   const handleGenerateImage = async () => {
     if (!input.trim() || isLoading) return;
+
+    // Create a new conversation if one doesn't exist
+    let currentConversationId = conversationId;
+    if (!currentConversationId) {
+      try {
+        const response = await conversationService.create();
+        if (response.success) {
+          currentConversationId = response.data._id;
+          onConversationIdChange?.(currentConversationId);
+          onNewConversation?.();
+        }
+      } catch (error) {
+        console.error('Error creating conversation:', error);
+      }
+    }
 
     const prompt = input.trim();
     const userMessage: Message = {
@@ -257,25 +306,37 @@ export default function ChatInterface({
       setMessages((prev) => {
         const newMessages = [...prev];
         const lastMessage = newMessages[newMessages.length - 1];
-        lastMessage.content = revisedPrompt;
-        lastMessage.imageUrl = imageUrl;
-        lastMessage.isLoading = false;
+        if (lastMessage) {
+          newMessages[newMessages.length - 1] = {
+            ...lastMessage,
+            content: revisedPrompt,
+            imageUrl: imageUrl,
+            isLoading: false,
+          };
+        }
         return newMessages;
       });
       
       // Save messages to conversation
-      await saveMessages([
-        { role: 'user', content: `Generate an image: ${prompt}`, type: 'text' },
-        { role: 'assistant', content: revisedPrompt, type: 'generated-image', metadata: { imageUrl } },
-      ]);
+      if (currentConversationId) {
+        await saveMessages([
+          { role: 'user', content: `Generate an image: ${prompt}`, type: 'text' },
+          { role: 'assistant', content: revisedPrompt, type: 'generated-image', metadata: { imageUrl } },
+        ], currentConversationId);
+      }
     } catch (error: any) {
       console.error('Error generating image:', error);
       setMessages((prev) => {
         const newMessages = [...prev];
         const lastMessage = newMessages[newMessages.length - 1];
-        lastMessage.content = `Error: ${error.response?.data?.error || error.message || 'Failed to generate image'}`;
-        lastMessage.type = 'text';
-        lastMessage.isLoading = false;
+        if (lastMessage) {
+          newMessages[newMessages.length - 1] = {
+            ...lastMessage,
+            content: `Error: ${error.response?.data?.error || error.message || 'Failed to generate image'}`,
+            type: 'text',
+            isLoading: false,
+          };
+        }
         return newMessages;
       });
     } finally {
@@ -325,6 +386,21 @@ export default function ChatInterface({
   const handleImageAnalysis = async () => {
     if (!selectedImage) return;
 
+    // Create a new conversation if one doesn't exist
+    let currentConversationId = conversationId;
+    if (!currentConversationId) {
+      try {
+        const response = await conversationService.create();
+        if (response.success) {
+          currentConversationId = response.data._id;
+          onConversationIdChange?.(currentConversationId);
+          onNewConversation?.();
+        }
+      } catch (error) {
+        console.error('Error creating conversation:', error);
+      }
+    }
+
     try {
       setIsLoading(true);
 
@@ -360,10 +436,12 @@ export default function ChatInterface({
       setMessages((prev) => [...prev, assistantMessage]);
       
       // Save messages to conversation
-      await saveMessages([
-        { role: 'user', content: prompt, type: 'image', metadata: { imageUrl: imageDataUrl } },
-        { role: 'assistant', content: analysisText, type: 'text' },
-      ]);
+      if (currentConversationId) {
+        await saveMessages([
+          { role: 'user', content: prompt, type: 'image', metadata: { imageUrl: imageDataUrl } },
+          { role: 'assistant', content: analysisText, type: 'text' },
+        ], currentConversationId);
+      }
     } catch (error: any) {
       console.error('Error analyzing image:', error);
       const errorMessage: Message = {
@@ -730,7 +808,10 @@ export default function ChatInterface({
                 const newMessages = [...prev];
                 const lastMessage = newMessages[newMessages.length - 1];
                 if (lastMessage && lastMessage.role === 'assistant') {
-                  lastMessage.content += text;
+                  newMessages[newMessages.length - 1] = {
+                    ...lastMessage,
+                    content: lastMessage.content + text,
+                  };
                 } else {
                   newMessages.push({
                     role: 'assistant',
