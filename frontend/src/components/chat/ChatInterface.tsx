@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Send, Image, Mic, Loader2, Square, Sparkles, Wand2, Volume2, VolumeX } from 'lucide-react';
+import { Send, Image, Mic, Loader2, Square, Sparkles, Wand2, Volume2, VolumeX, Phone } from 'lucide-react';
 import { aiService, TextRequest } from '@/services/ai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -55,7 +55,13 @@ export default function ChatInterface({
   }, [messages]);
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && !selectedImage) || isLoading) return;
+
+    // Check if we have a selected image to analyze
+    if (selectedImage) {
+      await handleImageAnalysis();
+      return;
+    }
 
     // Check if we're in image generation mode
     if (generateImageMode) {
@@ -229,43 +235,40 @@ export default function ChatInterface({
       return;
     }
 
-    // Convert to base64 for preview
+    // Convert to base64 for preview only - don't analyze yet
     const reader = new FileReader();
     reader.onloadend = () => {
       setSelectedImage(reader.result as string);
     };
     reader.readAsDataURL(file);
 
-    // Upload image and analyze
+    // Reset file input to allow selecting the same file again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleImageAnalysis = async () => {
+    if (!selectedImage) return;
+
     try {
       setIsLoading(true);
-      
-      // Convert file to base64 for API
-      const base64Image = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64 = (reader.result as string).split(',')[1];
-          resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
 
-      // For now, we'll use a data URL approach
-      // In production, you'd upload to a storage service first
-      const imageDataUrl = `data:${file.type};base64,${base64Image}`;
+      const imageDataUrl = selectedImage;
 
       const userMessage: Message = {
         role: 'user',
-        content: `[Image uploaded: ${file.name}]`,
+        content: input.trim() || '[Image uploaded]',
         type: 'image',
+        imageUrl: imageDataUrl,
       };
 
       setMessages((prev) => [...prev, userMessage]);
-
-      // Analyze image with a prompt
       const prompt = input.trim() || 'What do you see in this image? Describe it in detail.';
-      
+      setInput('');
+      setSelectedImage(null);
+
+      // Analyze image with the prompt
       const response = await aiService.analyzeImage({
         imageUrl: imageDataUrl,
         prompt,
@@ -281,8 +284,6 @@ export default function ChatInterface({
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
-      setSelectedImage(null);
-      setInput('');
     } catch (error: any) {
       console.error('Error analyzing image:', error);
       const errorMessage: Message = {
@@ -293,10 +294,6 @@ export default function ChatInterface({
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
     }
   };
 
@@ -928,166 +925,131 @@ export default function ChatInterface({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="border-t bg-muted/30 backdrop-blur-sm">
-        {/* Toolbar */}
-        <div className="px-4 pt-3 pb-2 flex items-center gap-2 flex-wrap border-b">
-          <Button
-            variant={audioEnabled ? 'default' : 'outline'}
-            size="sm"
-            title={audioEnabled ? 'Disable Audio Output' : 'Enable Audio Output'}
-            onClick={toggleAudio}
-            disabled={isLoading}
-            className={`text-xs transition-all ${
-              audioEnabled
-                ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                : ''
-            }`}
-          >
-            {audioEnabled ? (
-              <>
-                <Volume2 className="h-3 w-3 mr-1.5" />
-                Audio On
-              </>
-            ) : (
-              <>
-                <VolumeX className="h-3 w-3 mr-1.5" />
-                Audio Off
-              </>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            title="Upload Image"
-            onClick={handleImageUpload}
-            disabled={isLoading}
-            className="text-xs"
-          >
-            <Image className="h-3 w-3 mr-1.5" />
-            Upload Image
-          </Button>
-          <Button
-            variant={generateImageMode ? 'default' : 'outline'}
-            size="sm"
-            title={generateImageMode ? 'Click Send to generate image' : 'Generate Image'}
-            onClick={handleGenerateImageClick}
-            disabled={isLoading}
-            className={`text-xs ${generateImageMode ? 'bg-pink-500 hover:bg-pink-600 text-white' : ''}`}
-          >
-            <Wand2 className="h-3 w-3 mr-1.5" />
-            {generateImageMode ? 'Generate Image ✓' : 'Generate Image'}
-          </Button>
-          <Button
-            variant={isRecording ? 'destructive' : 'outline'}
-            size="sm"
-            title={isRecording ? 'Stop Recording' : 'Voice Input'}
-            onClick={handleVoiceInput}
-            disabled={isLoading || isRealtimeMode}
-            className={`text-xs transition-all ${
-              isRecording 
-                ? 'animate-pulse' 
-                : ''
-            }`}
-          >
-            {isRecording ? (
-              <>
-                <Square className="h-3 w-3 mr-1.5" />
-                Stop Recording
-              </>
-            ) : (
-              <>
-                <Mic className="h-3 w-3 mr-1.5" />
-                Voice Input
-              </>
-            )}
-          </Button>
-          <Button
-            variant={isRealtimeMode ? 'default' : 'outline'}
-            size="sm"
-            title={isRealtimeMode ? 'Disconnect Speech-to-Speech' : 'Enable Speech-to-Speech'}
-            onClick={toggleRealtimeMode}
-            disabled={isLoading || isRecording}
-            className={`text-xs transition-all ${
-              isRealtimeMode
-                ? 'bg-orange-500 hover:bg-orange-600 text-white animate-pulse'
-                : ''
-            }`}
-          >
-            {isRealtimeMode ? (
-              <>
-                <Square className="h-3 w-3 mr-1.5" />
-                Speech Mode
-              </>
-            ) : (
-              <>
-                <Mic className="h-3 w-3 mr-1.5" />
-                Speech-to-Speech
-              </>
-            )}
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-        </div>
-
+      <div className="border-t bg-background">
         {/* Input Area */}
         <div className="p-4">
           {selectedImage && (
-            <div className="mb-3 relative inline-block group">
+            <div className="mb-3 relative inline-block">
               <div className="relative">
                 <img
                   src={selectedImage}
                   alt="Selected"
-                  className="max-w-[200px] h-auto rounded-lg border-2 border-primary/30 shadow-md transition-transform group-hover:scale-105"
+                  className="max-w-[150px] h-auto rounded-lg border border-border"
                 />
-                <div className="absolute inset-0 bg-black/40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => setSelectedImage(null)}
-                  >
-                    ×
-                  </Button>
-                </div>
-              </div>
-              <div className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full shadow-lg">
-                Ready
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => setSelectedImage(null)}
+                >
+                  ×
+                </Button>
               </div>
             </div>
           )}
-          <div className="flex gap-3 items-end">
+          <div className="flex gap-2 items-end">
             <div className="flex-1 relative">
               <textarea
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder={generateImageMode ? "Describe the image you want to generate..." : "Type your message..."}
-                className="w-full min-h-[60px] max-h-[200px] p-4 border-2 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary/50 bg-background shadow-sm transition-all"
-                disabled={isLoading}
+                placeholder={generateImageMode ? "Describe the image..." : "Type your message..."}
+                className="w-full min-h-[52px] max-h-[200px] p-3 pr-20 border rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-ring bg-background text-sm"
+                style={{ 
+                  paddingBottom: isRecording ? '28px' : '12px',
+                  boxSizing: 'border-box'
+                }}
+                disabled={isLoading || isRealtimeMode}
               />
               {generateImageMode && (
-                <div className="absolute top-2 right-2 bg-pink-500 text-white text-xs px-2 py-1 rounded-full font-medium shadow-lg">
-                  ✨ Image Mode
+                <div className="absolute top-2 right-2 text-xs text-muted-foreground">
+                  Image Mode
                 </div>
               )}
               {isRecording && (
-                <div className="absolute bottom-2 left-4 flex items-center gap-2 text-destructive text-sm font-medium">
-                  <div className="h-2 w-2 bg-destructive rounded-full animate-pulse" />
-                  Recording...
+                <div className="absolute bottom-2 left-3 flex items-center gap-1.5 text-destructive text-xs">
+                  <div className="h-1.5 w-1.5 bg-destructive rounded-full animate-pulse" />
+                  Recording
                 </div>
               )}
+              {/* Minimal tool buttons inside input */}
+              <div className="absolute bottom-2 right-2 flex items-center gap-1">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title="Upload Image"
+                  onClick={handleImageUpload}
+                  disabled={isLoading || isRealtimeMode}
+                >
+                  <Image className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 ${generateImageMode ? 'bg-primary/10 text-primary' : ''}`}
+                  title="Generate Image"
+                  onClick={handleGenerateImageClick}
+                  disabled={isLoading || isRealtimeMode}
+                >
+                  <Wand2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 ${audioEnabled ? 'bg-primary/10 text-primary' : ''}`}
+                  title={audioEnabled ? 'Audio On' : 'Audio Off'}
+                  onClick={toggleAudio}
+                  disabled={isLoading || isRealtimeMode}
+                >
+                  {audioEnabled ? (
+                    <Volume2 className="h-4 w-4" />
+                  ) : (
+                    <VolumeX className="h-4 w-4" />
+                  )}
+                </Button>
+                {!isRealtimeMode && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-7 w-7 ${isRecording ? 'text-destructive' : ''}`}
+                    title={isRecording ? 'Stop Recording' : 'Voice Input'}
+                    onClick={handleVoiceInput}
+                    disabled={isLoading}
+                  >
+                    {isRecording ? (
+                      <Square className="h-4 w-4" />
+                    ) : (
+                      <Mic className="h-4 w-4" />
+                    )}
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 ${isRealtimeMode ? 'bg-orange-500/10 text-orange-600' : ''}`}
+                  title={isRealtimeMode ? 'Disconnect Speech-to-Speech' : 'Speech-to-Speech'}
+                  onClick={toggleRealtimeMode}
+                  disabled={isLoading || isRecording}
+                >
+                  <Phone className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <Button
               onClick={handleSend}
-              disabled={(!input.trim() && !selectedImage) || isLoading}
+              disabled={(!input.trim() && !selectedImage) || isLoading || isRealtimeMode}
               size="icon"
-              className="h-11 w-11 shadow-lg hover:shadow-xl transition-all hover:scale-105"
+              className="h-[52px] w-[52px] shrink-0 rounded-lg flex-shrink-0"
+              style={{ minHeight: '52px', minWidth: '52px' }}
             >
               {isLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
