@@ -44,8 +44,8 @@ export const loginUser = createAsyncThunk(
     try {
       const response = await authService.login(email, password);
       return {
-        user: response.data.data.user,
-        token: response.data.data.token,
+        user: response.data.user,
+        token: response.data.token,
       };
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.error || 'Login failed');
@@ -62,8 +62,8 @@ export const registerUser = createAsyncThunk(
     try {
       const response = await authService.register(name, email, password);
       return {
-        user: response.data.data.user,
-        token: response.data.data.token,
+        user: response.data.user,
+        token: response.data.token,
       };
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.error || 'Registration failed');

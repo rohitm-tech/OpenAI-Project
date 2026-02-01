@@ -34,7 +34,7 @@ This guide explains how to build and run MultimodAI using Docker.
    GOOGLE_OAUTH_CLIENT_SECRET=your_google_oauth_client_secret
    CORS_ORIGIN=http://localhost:3000
    FRONTEND_URL=http://localhost:3000
-   NEXT_PUBLIC_API_URL=http://localhost:3001
+   NEXT_PUBLIC_API_URL=https://openai-api-965239735739.europe-west1.run.app
    ```
 
 2. **Build and run with Docker Compose:**
@@ -60,8 +60,8 @@ docker run -p 3001:3001 --env-file .env multimodai-backend
 
 ```bash
 cd frontend
-docker build -t multimodai-frontend --build-arg NEXT_PUBLIC_API_URL=http://localhost:3001 .
-docker run -p 3000:3000 -e NEXT_PUBLIC_API_URL=http://localhost:3001 multimodai-frontend
+docker build -t multimodai-frontend --build-arg NEXT_PUBLIC_API_URL=https://openai-api-965239735739.europe-west1.run.app .
+docker run -p 3000:3000 -e NEXT_PUBLIC_API_URL=https://openai-api-965239735739.europe-west1.run.app multimodai-frontend
 ```
 
 ## Production Deployment

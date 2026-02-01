@@ -1,6 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export interface IConversation extends Document {
+export interface IConversation extends Omit<Document, 'model'> {
   userId: mongoose.Types.ObjectId;
   title: string;
   model: string;

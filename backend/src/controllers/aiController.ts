@@ -9,7 +9,7 @@ const textRequestSchema = z.object({
     z.array(
       z.object({
         role: z.enum(['user', 'assistant', 'developer']),
-        content: z.any(),
+        content: z.any().default(''),
       })
     ),
   ]),
@@ -23,8 +23,13 @@ export const generateText = async (req: AuthRequest, res: Response) => {
     const { input, instructions, model, conversationId } =
       textRequestSchema.parse(req.body);
 
+    // Ensure content is always present for array inputs
+    const processedInput = typeof input === 'string' 
+      ? input 
+      : input.map(msg => ({ role: msg.role, content: msg.content ?? '' }));
+    
     const response = await OpenAIService.generateText(
-      input,
+      processedInput,
       instructions,
       model
     );
@@ -55,8 +60,13 @@ export const generateTextStream = async (req: AuthRequest, res: Response) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // Disable buffering in nginx
 
+    // Ensure content is always present for array inputs
+    const processedInput = typeof input === 'string' 
+      ? input 
+      : input.map(msg => ({ role: msg.role, content: msg.content ?? '' }));
+    
     const stream = await OpenAIService.generateTextStream(
-      input,
+      processedInput,
       instructions,
       model || 'gpt-4o'
     );

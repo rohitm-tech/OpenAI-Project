@@ -34,11 +34,11 @@ export const createRealtimeClientSecret = async (req: AuthRequest, res: Response
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as { error?: { message?: string } };
       throw new Error(error.error?.message || 'Failed to create client secret');
     }
 
-    const data = await response.json();
+    const data = await response.json() as { value: string };
 
     res.json({
       success: true,

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import type { StringValue } from 'ms';
 import { env } from '../config/env';
 import { User } from '../models/User';
 import { google } from 'googleapis';
@@ -64,21 +65,30 @@ export const googleCallback = async (req: Request, res: Response) => {
         email: data.email,
         avatar: data.picture,
         provider: 'google',
-        providerId: data.id,
+        providerId: data.id || undefined,
         isEmailVerified: true,
       });
       await user.save();
     } else if (user.provider !== 'google') {
       // Update existing user to use Google OAuth
       user.provider = 'google';
-      user.providerId = data.id;
+      user.providerId = data.id || undefined;
       user.avatar = data.picture || user.avatar;
       await user.save();
     }
 
-    const token = jwt.sign({ userId: user._id }, env.jwtSecret, {
-      expiresIn: env.jwtExpiresIn,
-    });
+    if (!env.jwtSecret) {
+      throw new Error('JWT_SECRET is not configured');
+    }
+    const secret: string = env.jwtSecret;
+    const options: jwt.SignOptions = {
+      expiresIn: env.jwtExpiresIn as StringValue | number,
+    };
+    const token = jwt.sign(
+      { userId: user._id.toString() },
+      secret,
+      options
+    );
 
     res.cookie('token', token, {
       httpOnly: true,

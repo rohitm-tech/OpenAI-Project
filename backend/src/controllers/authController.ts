@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import type { StringValue } from 'ms';
 import { env } from '../config/env';
 import { User } from '../models/User';
 import { z } from 'zod';
@@ -41,9 +42,18 @@ export const register = async (req: Request, res: Response) => {
 
     await user.save();
 
-    const token = jwt.sign({ userId: user._id }, env.jwtSecret, {
-      expiresIn: env.jwtExpiresIn,
-    });
+    if (!env.jwtSecret) {
+      throw new Error('JWT_SECRET is not configured');
+    }
+    const secret: string = env.jwtSecret;
+    const options: jwt.SignOptions = {
+      expiresIn: env.jwtExpiresIn as StringValue | number,
+    };
+    const token = jwt.sign(
+      { userId: user._id.toString() },
+      secret,
+      options
+    );
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -56,7 +66,7 @@ export const register = async (req: Request, res: Response) => {
       success: true,
       data: {
         user: {
-          id: user._id,
+          id: user._id.toString(),
           name: user.name,
           email: user.email,
           avatar: user.avatar,
@@ -110,9 +120,18 @@ export const login = async (req: Request, res: Response) => {
       return;
     }
 
-    const token = jwt.sign({ userId: user._id }, env.jwtSecret, {
-      expiresIn: env.jwtExpiresIn,
-    });
+    if (!env.jwtSecret) {
+      throw new Error('JWT_SECRET is not configured');
+    }
+    const secret: string = env.jwtSecret;
+    const options: jwt.SignOptions = {
+      expiresIn: env.jwtExpiresIn as StringValue | number,
+    };
+    const token = jwt.sign(
+      { userId: user._id.toString() },
+      secret,
+      options
+    );
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -125,7 +144,7 @@ export const login = async (req: Request, res: Response) => {
       success: true,
       data: {
         user: {
-          id: user._id,
+          id: user._id.toString(),
           name: user.name,
           email: user.email,
           avatar: user.avatar,
@@ -172,7 +191,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       success: true,
       data: {
         user: {
-          id: authReq.user._id,
+          id: authReq.user._id.toString(),
           name: authReq.user.name,
           email: authReq.user.email,
           avatar: authReq.user.avatar,
