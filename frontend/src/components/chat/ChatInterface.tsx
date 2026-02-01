@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Send, Image, Mic, Loader2, Square, Sparkles } from 'lucide-react';
+import { Send, Image, Mic, Loader2, Square, Sparkles, Wand2 } from 'lucide-react';
 import { aiService, TextRequest } from '@/services/ai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -11,8 +11,9 @@ import remarkGfm from 'remark-gfm';
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  type: 'text' | 'image' | 'audio';
+  type: 'text' | 'image' | 'audio' | 'generated-image';
   isLoading?: boolean;
+  imageUrl?: string;
 }
 
 interface ChatInterfaceProps {
@@ -122,6 +123,60 @@ export default function ChatInterface({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const handleGenerateImage = async () => {
+    if (!input.trim() || isLoading) return;
+
+    const prompt = input.trim();
+    const userMessage: Message = {
+      role: 'user',
+      content: `Generate an image: ${prompt}`,
+      type: 'text',
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInput('');
+    setIsLoading(true);
+
+    const assistantMessage: Message = {
+      role: 'assistant',
+      content: '',
+      type: 'generated-image',
+      isLoading: true,
+    };
+
+    setMessages((prev) => [...prev, assistantMessage]);
+
+    try {
+      const response = await aiService.generateImage({
+        prompt,
+      });
+
+      const imageUrl = response.data?.imageUrl || response.imageUrl || '';
+      const revisedPrompt = response.data?.revisedPrompt || response.revisedPrompt || prompt;
+
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        const lastMessage = newMessages[newMessages.length - 1];
+        lastMessage.content = revisedPrompt;
+        lastMessage.imageUrl = imageUrl;
+        lastMessage.isLoading = false;
+        return newMessages;
+      });
+    } catch (error: any) {
+      console.error('Error generating image:', error);
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        const lastMessage = newMessages[newMessages.length - 1];
+        lastMessage.content = `Error: ${error.response?.data?.error || error.message || 'Failed to generate image'}`;
+        lastMessage.type = 'text';
+        lastMessage.isLoading = false;
+        return newMessages;
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -338,6 +393,7 @@ export default function ChatInterface({
             <div className="flex flex-wrap justify-center gap-3 mt-6 text-xs">
               <span className="px-3 py-1 rounded-full bg-muted border">💬 Text Chat</span>
               <span className="px-3 py-1 rounded-full bg-muted border">🖼️ Image Analysis</span>
+              <span className="px-3 py-1 rounded-full bg-muted border">✨ Generate Images</span>
               <span className="px-3 py-1 rounded-full bg-muted border">🎤 Voice Input</span>
             </div>
           </div>
@@ -384,6 +440,26 @@ export default function ChatInterface({
                       </div>
                     )}
                     <p className="text-sm opacity-90 font-medium">{message.content}</p>
+                  </div>
+                ) : message.type === 'generated-image' ? (
+                  <div className="space-y-3">
+                    {message.imageUrl ? (
+                      <div className="relative group">
+                        <img
+                          src={message.imageUrl}
+                          alt={message.content || 'Generated image'}
+                          className="max-w-full h-auto rounded-lg shadow-lg border-2 border-primary/20 transition-transform group-hover:scale-[1.02]"
+                        />
+                        <div className="absolute top-2 right-2 bg-gradient-to-r from-purple-500/90 to-pink-500/90 text-white text-xs px-2 py-1 rounded backdrop-blur-sm font-medium">
+                          ✨ Generated
+                        </div>
+                      </div>
+                    ) : null}
+                    {message.content && (
+                      <p className="text-sm text-muted-foreground italic">
+                        Prompt: {message.content}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
@@ -468,6 +544,16 @@ export default function ChatInterface({
                 className="h-10 w-10 hover:bg-purple-50 dark:hover:bg-purple-950/20 hover:border-purple-300 transition-all"
               >
                 <Image className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                title="Generate Image"
+                onClick={handleGenerateImage}
+                disabled={!input.trim() || isLoading}
+                className="h-10 w-10 hover:bg-pink-50 dark:hover:bg-pink-950/20 hover:border-pink-300 transition-all"
+              >
+                <Wand2 className="h-4 w-4" />
               </Button>
               <Button
                 variant={isRecording ? 'destructive' : 'outline'}

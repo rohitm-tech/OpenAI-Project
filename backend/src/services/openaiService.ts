@@ -250,12 +250,14 @@ export class OpenAIService {
   }
 
   /**
-   * Generate image using DALL-E API
+   * Generate image using DALL-E API or Responses API
+   * Tries DALL-E first, falls back to Responses API with gpt-4.1-mini
    */
   static async generateImage(
     prompt: string,
     model: string = 'dall-e-3'
   ) {
+    // Try DALL-E API first
     try {
       const response = await client.images.generate({
         model: model as 'dall-e-2' | 'dall-e-3',
@@ -274,8 +276,36 @@ export class OpenAIService {
 
       throw new Error('No image generated');
     } catch (error: any) {
-      console.error('OpenAI image generation error:', error);
-      throw new Error(`OpenAI API error: ${error.message || error.error?.message || 'Unknown error'}`);
+      console.error('DALL-E image generation error:', error);
+      
+      // Fallback to Responses API with gpt-4.1-mini
+      try {
+        console.log('Trying Responses API with gpt-4.1-mini for image generation...');
+        const response = await client.responses.create({
+          model: 'gpt-4.1-mini',
+          input: prompt,
+          tools: [{ type: 'image_generation' }],
+        });
+
+        const imageData = response.output
+          .filter((output: any) => output.type === 'image_generation_call')
+          .map((output: any) => output.result);
+
+        if (imageData.length > 0) {
+          // The result is base64 encoded
+          const imageBase64 = imageData[0];
+          return {
+            imageUrl: `data:image/png;base64,${imageBase64}`,
+            revisedPrompt: prompt,
+            id: `img_${Date.now()}`,
+          };
+        }
+
+        throw new Error('No image generated from Responses API');
+      } catch (fallbackError: any) {
+        console.error('Responses API image generation error:', fallbackError);
+        throw new Error(`OpenAI API error: ${error.message || error.error?.message || fallbackError.message || 'Unknown error'}`);
+      }
     }
   }
 

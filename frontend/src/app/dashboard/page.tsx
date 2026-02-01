@@ -46,13 +46,11 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-muted/20">
       {/* Main Content */}
-      <div className="flex-1 container mx-auto px-4 py-6 max-w-7xl">
+      <div className="flex-1 w-full">
         {/* Chat Interface */}
-        <Card className="border-2 shadow-xl overflow-hidden">
-          <div className="h-[calc(100vh-200px)] min-h-[600px]">
-            <ChatInterface />
-          </div>
-        </Card>
+        <div className="h-[calc(100vh-80px)]">
+          <ChatInterface />
+        </div>
       </div>
     </div>
   );
