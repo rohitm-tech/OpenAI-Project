@@ -2,8 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Send, Image, Mic, Loader2, Square, Sparkles, Wand2, Volume2, VolumeX, Phone } from 'lucide-react';
+import { Send, Image, Mic, Loader2, Square, Sparkles, Wand2, Volume2, VolumeX, Phone, Copy, Check, User, Bot, Download } from 'lucide-react';
 import { aiService, TextRequest } from '@/services/ai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -35,6 +34,7 @@ export default function ChatInterface({
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [generateImageMode, setGenerateImageMode] = useState(false);
   const [isRealtimeMode, setIsRealtimeMode] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const realtimeConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -48,6 +48,25 @@ export default function ChatInterface({
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const copyToClipboard = async (text: string, index: number) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIndex(index);
+      setTimeout(() => setCopiedIndex(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const downloadImage = (imageUrl: string, filename: string = 'generated-image.png') => {
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   useEffect(() => {
@@ -817,93 +836,140 @@ export default function ChatInterface({
         {messages.map((message, index) => (
           <div
             key={index}
-            className={`flex ${
-              message.role === 'user' ? 'justify-end' : 'justify-start'
-            } animate-in fade-in slide-in-from-bottom-4 duration-300`}
+            className={`group flex gap-3 ${
+              message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
+            } animate-in fade-in slide-in-from-bottom-2 duration-200`}
           >
-            <Card
-              className={`max-w-[85%] md:max-w-[75%] ${
+            {/* Avatar */}
+            <div
+              className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
                 message.role === 'user'
-                  ? 'bg-gradient-to-br from-primary to-primary/90 text-primary-foreground shadow-lg border-primary/20'
-                  : 'bg-card border-2 shadow-md hover:shadow-lg transition-shadow'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
               }`}
             >
-              <CardContent className="p-4 md:p-5">
-                {message.isLoading ? (
-                  <div className="flex items-center gap-3">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span className="text-sm">Thinking...</span>
-                  </div>
-                ) : message.role === 'assistant' ? (
-                  <div className="space-y-2">
-                    <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-p:leading-relaxed prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+              {message.role === 'user' ? (
+                <User className="h-4 w-4" />
+              ) : (
+                <Bot className="h-4 w-4" />
+              )}
+            </div>
+
+            {/* Message Content */}
+            <div
+              className={`flex-1 max-w-[85%] md:max-w-[75%] ${
+                message.role === 'user' ? 'flex flex-col items-end' : ''
+              }`}
+            >
+              {message.isLoading ? (
+                <div className="flex items-center gap-2 text-muted-foreground py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Thinking...</span>
+                </div>
+              ) : message.type === 'image' ? (
+                <div className="space-y-2">
+                  {message.imageUrl && (
+                    <div className="relative rounded-lg overflow-hidden">
+                      <img
+                        src={message.imageUrl}
+                        alt="Uploaded"
+                        className="max-w-[300px] h-auto rounded-lg"
+                      />
+                    </div>
+                  )}
+                  {message.content && message.content !== '[Image uploaded]' && (
+                    <p className={`text-sm ${message.role === 'user' ? 'text-right' : ''}`}>
+                      {message.content}
+                    </p>
+                  )}
+                </div>
+              ) : message.type === 'generated-image' ? (
+                <div className="space-y-2">
+                  {message.imageUrl && (
+                    <div className="relative rounded-lg overflow-hidden group/img">
+                      <img
+                        src={message.imageUrl}
+                        alt={message.content || 'Generated image'}
+                        className="max-w-[400px] h-auto rounded-lg"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover/img:opacity-100">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="h-8"
+                          onClick={() => downloadImage(message.imageUrl!, `generated-${index}.png`)}
+                        >
+                          <Download className="h-4 w-4 mr-1" />
+                          Download
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {message.content && (
+                    <p className="text-xs text-muted-foreground">
+                      {message.content}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div
+                  className={`rounded-2xl px-4 py-2.5 ${
+                    message.role === 'user'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted'
+                  }`}
+                >
+                  {message.role === 'assistant' ? (
+                    <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-code:bg-background/50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-pre:bg-background/50 prose-pre:p-3 prose-pre:rounded-lg">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {message.content}
                       </ReactMarkdown>
                     </div>
-                    {message.content && !message.isLoading && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => speakText(message.content)}
-                        disabled={isPlayingAudio}
-                      >
-                        {isPlayingAudio ? (
-                          <>
-                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                            Speaking...
-                          </>
-                        ) : (
-                          <>
-                            <Volume2 className="h-3 w-3 mr-1" />
-                            Speak
-                          </>
-                        )}
-                      </Button>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Action buttons - show on hover */}
+              {!message.isLoading && message.content && (
+                <div
+                  className={`flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity ${
+                    message.role === 'user' ? 'flex-row-reverse' : ''
+                  }`}
+                >
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    onClick={() => copyToClipboard(message.content, index)}
+                    title="Copy"
+                  >
+                    {copiedIndex === index ? (
+                      <Check className="h-3.5 w-3.5 text-green-500" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
                     )}
-                  </div>
-                ) : message.type === 'image' ? (
-                  <div className="space-y-3">
-                    {selectedImage && message.content.includes('[Image uploaded') && (
-                      <div className="relative group">
-                        <img
-                          src={selectedImage}
-                          alt="Uploaded"
-                          className="max-w-full h-auto rounded-lg shadow-lg border-2 border-primary/20 transition-transform group-hover:scale-[1.02]"
-                        />
-                        <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-sm">
-                          Image
-                        </div>
-                      </div>
-                    )}
-                    <p className="text-sm opacity-90 font-medium">{message.content}</p>
-                  </div>
-                ) : message.type === 'generated-image' ? (
-                  <div className="space-y-3">
-                    {message.imageUrl ? (
-                      <div className="relative group">
-                        <img
-                          src={message.imageUrl}
-                          alt={message.content || 'Generated image'}
-                          className="max-w-full h-auto rounded-lg shadow-lg border-2 border-primary/20 transition-transform group-hover:scale-[1.02]"
-                        />
-                        <div className="absolute top-2 right-2 bg-gradient-to-r from-purple-500/90 to-pink-500/90 text-white text-xs px-2 py-1 rounded backdrop-blur-sm font-medium">
-                          ✨ Generated
-                        </div>
-                      </div>
-                    ) : null}
-                    {message.content && (
-                      <p className="text-sm text-muted-foreground italic">
-                        Prompt: {message.content}
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
-                )}
-              </CardContent>
-            </Card>
+                  </Button>
+                  {message.role === 'assistant' && message.type === 'text' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      onClick={() => speakText(message.content)}
+                      disabled={isPlayingAudio}
+                      title="Speak"
+                    >
+                      {isPlayingAudio ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Volume2 className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         ))}
         <div ref={messagesEndRef} />
@@ -939,9 +1005,10 @@ export default function ChatInterface({
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
                 placeholder={generateImageMode ? "Describe the image..." : "Type your message..."}
-                className="w-full min-h-[52px] max-h-[200px] p-3 pr-20 border rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-ring bg-background text-sm"
+                className="w-full min-h-[52px] max-h-[200px] p-3 border rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-ring bg-background text-sm"
                 style={{ 
-                  paddingBottom: isRecording ? '28px' : '12px',
+                  paddingBottom: isRecording ? '36px' : '28px',
+                  paddingRight: '60px',
                   boxSizing: 'border-box'
                 }}
                 disabled={isLoading || isRealtimeMode}
@@ -952,95 +1019,95 @@ export default function ChatInterface({
                 </div>
               )}
               {isRecording && (
-                <div className="absolute bottom-2 left-3 flex items-center gap-1.5 text-destructive text-xs">
+                <div className="absolute bottom-[28px] left-3 flex items-center gap-1.5 text-destructive text-xs">
                   <div className="h-1.5 w-1.5 bg-destructive rounded-full animate-pulse" />
                   Recording
                 </div>
               )}
-              {/* Minimal tool buttons inside input */}
-              <div className="absolute bottom-2 right-2 flex items-center gap-1">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  title="Upload Image"
-                  onClick={handleImageUpload}
-                  disabled={isLoading || isRealtimeMode}
-                >
-                  <Image className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-7 w-7 ${generateImageMode ? 'bg-primary/10 text-primary' : ''}`}
-                  title="Generate Image"
-                  onClick={handleGenerateImageClick}
-                  disabled={isLoading || isRealtimeMode}
-                >
-                  <Wand2 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-7 w-7 ${audioEnabled ? 'bg-primary/10 text-primary' : ''}`}
-                  title={audioEnabled ? 'Audio On' : 'Audio Off'}
-                  onClick={toggleAudio}
-                  disabled={isLoading || isRealtimeMode}
-                >
-                  {audioEnabled ? (
-                    <Volume2 className="h-4 w-4" />
-                  ) : (
-                    <VolumeX className="h-4 w-4" />
-                  )}
-                </Button>
-                {!isRealtimeMode && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={`h-7 w-7 ${isRecording ? 'text-destructive' : ''}`}
-                    title={isRecording ? 'Stop Recording' : 'Voice Input'}
-                    onClick={handleVoiceInput}
-                    disabled={isLoading}
-                  >
-                    {isRecording ? (
-                      <Square className="h-4 w-4" />
-                    ) : (
-                      <Mic className="h-4 w-4" />
-                    )}
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-7 w-7 ${isRealtimeMode ? 'bg-orange-500/10 text-orange-600' : ''}`}
-                  title={isRealtimeMode ? 'Disconnect Speech-to-Speech' : 'Speech-to-Speech'}
-                  onClick={toggleRealtimeMode}
-                  disabled={isLoading || isRecording}
-                >
-                  <Phone className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+              {/* Tool buttons in second row inside input box */}
+              <div className="absolute bottom-2 left-2 flex items-center gap-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
             <Button
-              onClick={handleSend}
-              disabled={(!input.trim() && !selectedImage) || isLoading || isRealtimeMode}
+              variant="ghost"
               size="icon"
-              className="h-[52px] w-[52px] shrink-0 rounded-lg flex-shrink-0"
-              style={{ minHeight: '52px', minWidth: '52px' }}
+              className="h-7 w-7"
+              title="Upload Image"
+              onClick={handleImageUpload}
+              disabled={isLoading || isRealtimeMode}
             >
-              {isLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
+              <Image className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-7 w-7 ${generateImageMode ? 'bg-primary/10 text-primary' : ''}`}
+              title="Generate Image"
+              onClick={handleGenerateImageClick}
+              disabled={isLoading || isRealtimeMode}
+            >
+              <Wand2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-7 w-7 ${audioEnabled ? 'bg-primary/10 text-primary' : ''}`}
+              title={audioEnabled ? 'Audio On' : 'Audio Off'}
+              onClick={toggleAudio}
+              disabled={isLoading || isRealtimeMode}
+            >
+              {audioEnabled ? (
+                <Volume2 className="h-4 w-4" />
               ) : (
-                <Send className="h-5 w-5" />
+                <VolumeX className="h-4 w-4" />
               )}
             </Button>
+            {!isRealtimeMode && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 ${isRecording ? 'text-destructive' : ''}`}
+                title={isRecording ? 'Stop Recording' : 'Voice Input'}
+                onClick={handleVoiceInput}
+                disabled={isLoading}
+              >
+                {isRecording ? (
+                  <Square className="h-4 w-4" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-7 w-7 ${isRealtimeMode ? 'bg-orange-500/10 text-orange-600' : ''}`}
+              title={isRealtimeMode ? 'Disconnect Speech-to-Speech' : 'Speech-to-Speech'}
+              onClick={toggleRealtimeMode}
+              disabled={isLoading || isRecording}
+            >
+              <Phone className="h-4 w-4" />
+            </Button>
+              </div>
+              {/* Send button inside input box */}
+              <Button
+                onClick={handleSend}
+                disabled={(!input.trim() && !selectedImage) || isLoading || isRealtimeMode}
+                size="icon"
+                className="absolute top-2 right-2 h-[28px] w-[28px] rounded-lg"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
